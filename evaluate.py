@@ -113,10 +113,13 @@ def var(name, type):
         '__mmask64': 64,
 
         '__m64': 64,
+
         '__m128i': 128,
+
         '__m256': 256,
         '__m256d': 256,
         '__m256i': 256,
+
         '__m512i': 512,
     }[type]
     return z3.BitVec(name, width)
@@ -402,9 +405,9 @@ class Function:
 # Uhh I don't think you're actually supposed to do this. Hex formatting for Z3.
 class HexFormatter(z3.Formatter):
     def pp_int(self, a):
-        return z3.to_format(hex(a.as_long()))
+        return z3.to_format('0x%0*x' % (a.size() // 4, a.as_long()))
     def pp_bv(self, a):
-        return z3.to_format(hex(a.as_long()))
+        return z3.to_format('0x%0*x' % (a.size() // 4, a.as_long()))
 z3.z3printer._Formatter = HexFormatter()
 
 # Run various expressions through a solver.

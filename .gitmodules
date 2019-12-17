@@ -1,0 +1,3 @@
+[submodule "sprdpl"]
+	path = sprdpl
+	url = ssh://github.com/zwegner/sprdpl

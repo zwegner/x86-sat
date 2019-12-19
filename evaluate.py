@@ -222,7 +222,7 @@ class BinaryOp:
 @node('expr', 'hi', 'lo')
 class Slice:
     def eval(self, ctx):
-        expr = self.expr.eval(ctx)
+        expr = try_simplify(self.expr.eval(ctx))
         hi, lo = self.hi.eval(ctx), self.lo.eval(ctx)
         width = hi - lo + 1
 

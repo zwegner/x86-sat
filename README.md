@@ -12,7 +12,19 @@ guide with data for each x86 intrinsic instruction, including a pseudocode that 
 behavior. The intrinsics guide is backed by an XML file with all of this data in an easily parseable format,
 which we use here to build a Z3 model.
 
-This method is inherently limited. The intrinsics only cover a subset of x86 instructions, so this will mostly be
+So far, only these features of Intel's pseudocode are supported:
+* Basic unary/binary arithmetic/bitwise operations, and ternary conditionals
+* Bit slices, both reading and writing
+* `IF`/`CASE` conditionals (which are predicated when they can't be statically resolved)
+* `FOR` loops
+* Function definitions/calls
+See `tokens`/`rules` in `parse.py` for the most up-to-date information.
+
+There are many functions used in Intel's documentation that are not explicitly given in the XML. For now,
+these are almost all unsupported (see `INTR_GLOBALS` in `evaluate.py` for the current list).
+
+This method of generating models is inherently limited. The intrinsics only cover a subset of x86
+instructions (presumably until a PDF reader is added), so this will mostly be
 useful for investigating hand-rolled SIMD code, etc. Handling memory might be possible but would
 certainly be very slow. Handling control flow is likely out of scope for now too.
 
@@ -20,20 +32,20 @@ There are quite possibly bugs in this implementation, which can be pretty hard t
 There are also definitely bugs in Intel's code (see below), so this shouldn't be relied on
 for anything serious.
 
-So far, this can do some interesting non-trivial things, like deriving lookup
+So far, this can do some interesting non-trivial things, like derive lookup
 tables for `vpternlogd`:
 ```python
-check(_mm512_ternarylogic_epi32(_mm512_set1_epi8(0xAA),
-       _mm512_set1_epi8(0xCC), _mm512_set1_epi8(0xF0), y) == _mm512_set1_epi8(0x57))
+check_print(m512.ternarylogic_epi32(m512.set1_epi8(0xAA),
+       m512.set1_epi8(0xCC), m512.set1_epi8(0xF0), i) == m512.set1_epi8(0x57))
 # -> [y = 0x1f]
 ```
-...or finding an index vector for `vpermb` for reversing its input:
+...or find an index vector for `vpermb` that reverses its input:
 ```python
 values = range(2, 3*64, 3)
 check(_mm512_set_epi8(*values) == _mm512_permutexvar_epi8(b, _mm512_set_epi8(*reversed(values))))
 # <- [b = 0x000102030405060708090a0b0c0d0e0f1011...]
 ```
-...or **finding a bug in Intel's pseudocode**. Turns out that last one gives `unsat`, which didn't make sense.
+...or **find a bug in Intel's pseudocode**. Turns out that last one gives `unsat`, which didn't make sense.
 Investigating further, I noticed that I wasn't getting the right result for a `_mm512_set_epi8(*range(64))`,
 which led me to find this bug in the `_mm512_set_epi8` pseudocode:
 ```diff
@@ -55,3 +67,6 @@ redistribute this file myself.
 
 This project requires Z3, and my [sprdpl](https://github.com/zwegner/sprdpl) parsing library
 (included as a submodule).
+
+The library is mainly used with LazyXMLParser() magic object, which parses intrinsics on demand. See `example.py`
+for various example use cases.

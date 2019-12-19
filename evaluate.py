@@ -40,6 +40,11 @@ class Context:
         yield
         self.pred = old_pred
 
+# Kinda hacky: evaluate a Node if it's a Node. This is basically just an
+# alternative to making a wrapper node type for literals
+def try_eval(ctx, e):
+    return e.eval(ctx) if isinstance(e, Node) else e
+
 def is_z3(v):
     return z3.is_expr(v) or z3.is_sort(v)
 
@@ -95,60 +100,69 @@ def match_width_fn(lhs, rhs, fn, add=0, double=False):
 def indent(s):
     return '    ' + str(s).replace('\n', '\n    ')
 
-# Shortcut for making a Z3 bitvector with the right number of bits for a C type
-def var(name, type):
-    width = {
-        'char': 8,
-        '__mmask8': 8,
+# Width of supported C types in bits
+WIDTH_TYPES = {
+      8: ['char', '__mmask8'],
+     16: ['short', '__mmask16'],
+     32: ['int', 'const int', '__mmask32'],
+     64: ['long long', '__int64', '__mmask64', '__m64'],
+    128: ['__m128i'],
+    256: ['__m256', '__m256d', '__m256i'],
+    512: ['__m512i']
+}
+TYPE_WIDTH = {t: size for size, ts in WIDTH_TYPES.items() for t in ts}
 
-        'short': 16,
-        '__mmask16': 16,
-
-        'int': 32,
-        'const int': 32,
-        '__mmask32': 32,
-
-        'long long': 64,
-        '__int64': 64,
-        '__mmask64': 64,
-
-        '__m64': 64,
-
-        '__m128i': 128,
-
-        '__m256': 256,
-        '__m256d': 256,
-        '__m256i': 256,
-
-        '__m512i': 512,
-    }[type]
-    return z3.BitVec(name, width)
+# Deep structural equality check for Node types. Node.__eq__ is overloaded to
+# create a new BinaryOp expression, so this needs to be a separate function
+def equal(a, b):
+    if type(a) != type(b):
+        return False
+    if not isinstance(a, Node):
+        return a == b
+    return all(equal(getattr(a, param), getattr(b, param))
+            for param in type(a).params)
 
 # AST types. These handle all evaluation
 
 class Node:
-    pass
+    # This generic __init__ uses the params/kwparams filled in by the
+    # @node() decorator
+    def __init__(self, *args, info=None, **kwargs):
+        params, kwparams = type(self).params, type(self).kwparams
+        assert len(args) == len(params)
+        for p, a in zip(params, args):
+            setattr(self, p, a)
+
+        # Update attributes from default parameters, then actual kwargs
+        for k, v in kwparams.items():
+            setattr(self, k, v)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+        self.info = info or args[0]
+
+    # Overload ops to create new expressions
+    def __eq__(self, other):
+        return BinaryOp('==', self, other)
 
 # Decorator for easily making Node subclasses with given parameters
-def node(*params):
+def node(*params, **kwparams):
     def decorate(cls):
         # Redefine class to have Node as parent. Cool hack bro.
         cls = type(cls.__name__, (Node,), dict(cls.__dict__))
-
-        def __init__(self, *args, info=None):
-            assert len(args) == len(params)
-            for p, a in zip(params, args):
-                setattr(self, p, a)
-            self.info = info or args[0]
-
-        def __eq__(self, other):
-            if type(self) != type(other): return False
-            return all(getattr(self, a) == getattr(other, a) for a in params)
-
-        cls.__init__ = __init__
-        cls.__eq__ = __eq__
+        cls.params = params
+        cls.kwparams = kwparams
         return cls
     return decorate
+
+# Generic free variable, evaluates to a Z3 bitvector with the right number of
+# bits for the corresponding C type
+@node('name', 'type')
+class Var:
+    def eval(self, ctx):
+        return z3.BitVec(self.name, TYPE_WIDTH[self.type])
+    def __repr__(self):
+        return '(%s)%s' % (self.type, self.name)
 
 @node('name')
 class Identifier:
@@ -176,7 +190,7 @@ class UnaryOp:
 @node('op', 'lhs', 'rhs')
 class BinaryOp:
     def eval(self, ctx):
-        lhs, rhs = match_width(self.lhs.eval(ctx), self.rhs.eval(ctx))
+        lhs, rhs = match_width(try_eval(ctx, self.lhs), try_eval(ctx, self.rhs))
         if self.op == '+':
             return lhs + rhs
         elif self.op == '-':
@@ -218,7 +232,7 @@ class Slice:
             # Big hack! Simplify (x+y)-x -> y to get the width when we don't
             # know x. This is pretty common, e.g. a[index*8+7:index*8]
             if (isinstance(self.hi, BinaryOp) and self.hi.op == '+' and
-                    self.hi.lhs == self.lo):
+                    equal(self.hi.lhs, self.lo)):
                 width1 = try_simplify(self.hi.rhs.eval(ctx))
                 return z3.Extract(width1, 0, shifted)
 
@@ -226,9 +240,9 @@ class Slice:
             # range [lo, hi], since it can't determine if lo <= hi. Well, it
             # actually can, but the Z3 python wrapper doesn't simplify that
             # expression before checking it. So, as a special case, see if we
-            # can at least determine that lo == hi (which is common because Slice
-            # is used for single-bit indexing like a[i]), then replace the
-            # expression with a variable shift and a single-bit extract.
+            # can at least determine that lo == hi (which is common because
+            # Slice is used for single-bit indexing like a[i]), then replace
+            # the expression with a variable shift and a single-bit extract.
             if is_z3(hi) and is_z3(lo) and try_bool(hi == lo):
                 return z3.Extract(0, 0, shifted)
 
@@ -240,14 +254,17 @@ class Slice:
         return (expr >> lo) & mask
 
     def __repr__(self):
+        if self.hi is self.lo:
+            return '%s[%s]' % (self.expr, self.hi)
         return '%s[%s:%s]' % (self.expr, self.hi, self.lo)
 
 @node('fn', 'args')
 class Call:
     def eval(self, ctx):
         fn = self.fn.eval(ctx)
-        assert callable(fn)
-        args = [a.eval(ctx) for a in self.args]
+        if isinstance(fn, Function):
+            fn = fn.run
+        args = [try_eval(ctx, a) for a in self.args]
         return fn(*args, pred=ctx.pred)
     def __repr__(self):
         return '%s(%s)' % (self.fn, ', '.join(map(str, self.args)))
@@ -315,7 +332,7 @@ class If:
             expr = (expr != 0)
         expr = try_simplify(expr)
 
-        # If we can statically determine this expression, only execute one branch
+        # If we can statically resolve this condition, only execute one branch
         bool_expr = try_bool(expr)
         if bool_expr == True:
             self.if_block.eval(ctx)
@@ -330,7 +347,8 @@ class If:
         return None
 
     def __repr__(self):
-        else_block = 'ELSE\n%s\n' % indent(self.else_block) if self.else_block.stmts else ''
+        else_block = ('ELSE\n%s\n' % indent(self.else_block)
+                if self.else_block.stmts else '')
         return 'IF %s\n%s\n%sFI' % (self.expr,
                 indent(self.if_block), else_block)
 
@@ -349,7 +367,8 @@ class Case:
                 with ctx.predicated(expr):
                     stmt.eval(ctx)
     def __repr__(self):
-        cases = '\n'.join('%8s: %s' % (value, stmt) for [value, stmt] in self.cases)
+        cases = '\n'.join('%8s: %s' % (value, stmt)
+                for [value, stmt] in self.cases)
         return 'CASE %s OF\n%s\nESAC' % (self.expr, indent(cases))
 
 @node('var', 'lo', 'hi', 'block')
@@ -378,29 +397,36 @@ class Return:
     def __repr__(self):
         return 'RETURN %s' % self.expr
 
-@node('name', 'params', 'block')
+@node('name', 'params', 'block', return_type=None)
 class Function:
-    def eval(self, ctx):
-        def run(*args, **ctx_args):
-            ctx = Context(**ctx_args)
-            assert len(args) == len(self.params)
-            for p, a in zip(self.params, args):
-                ctx.set(p.name, a.eval(ctx) if isinstance(a, Node) else a)
+    def run(self, *args, **ctx_args):
+        ctx = Context(**ctx_args)
+        assert len(args) == len(self.params)
+        for p, a in zip(self.params, args):
+            ctx.set(p.name, a)
 
-            try:
-                self.block.eval(ctx)
-            except ReturnExc as e:
-                return e.value
+        try:
+            self.block.eval(ctx)
+        except ReturnExc as e:
+            return e.value
 
-            return None
-
-        run.__name__ = self.name
-        ctx.set(self.name, run)
         return None
 
+    def eval(self, ctx):
+        ctx.set(self.name, self)
+        return self
+
+    def __call__(self, *args):
+        # This will cause an extra eval() of the actual function each time it's
+        # called, which calls ctx.set(). This should pretty much not matter,
+        # but it seems weird
+        return Call(self, args)
+
     def __repr__(self):
-        return 'DEFINE %s(%s) {\n%s\n}' % (self.name, ', '.join(map(str, self.params)),
-                indent(self.block))
+        if self.block is None:
+            return self.name
+        return 'DEFINE %s(%s) {\n%s\n}' % (self.name,
+                ', '.join(map(str, self.params)), indent(self.block))
 
 # Uhh I don't think you're actually supposed to do this. Hex formatting for Z3.
 class HexFormatter(z3.Formatter):
@@ -413,12 +439,17 @@ z3.z3printer._Formatter = HexFormatter()
 # Run various expressions through a solver.
 def check(assertion, for_all=[]):
     solver = z3.Solver()
+    ctx = Context()
+    assertion = assertion.eval(ctx)
     if for_all:
+        for_all = [f.eval(ctx) for f in for_all]
         assertion = z3.ForAll(for_all, assertion)
     result = solver.check(assertion)
     if result != z3.sat:
-        print(result)
-        #print(solver.unsat_core())
         return None
-    model = solver.model()
-    return model
+    return solver.model()
+
+def check_print(assertion, for_all=[]):
+    result = check(assertion, for_all=for_all)
+    print(result)
+    return result

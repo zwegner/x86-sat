@@ -106,9 +106,9 @@ rules = [
 
 parser = libparse.Parser(rules, 'stmt_list')
 
-def parse_operation(intrinsic, params, dst, operation):
+def parse_operation(name, params, return_type, operation):
     operation = operation.replace('\t', ' ' * 4)
-    lex_ctx = lexer.input(operation, filename=intrinsic)
+    lex_ctx = lexer.input(operation, filename=name)
     try:
         tree = parser.parse(lex_ctx)
     except libparse.ParseError as e:
@@ -116,14 +116,15 @@ def parse_operation(intrinsic, params, dst, operation):
         raise
 
     # Create a wrapper function for this intrinsic
-    def run(*args):
-        ctx = Context()
+    def run(*args, **ctx_args):
+        ctx = Context(**ctx_args)
         # Set up arguments
         assert len(args) == len(params), ('wrong number of arguments, got %s, '
                 'expected %s') % (len(args), len(params))
         for p, a in zip(params, args):
-            ctx.set(p.sexpr(), a)
-        ctx.set(dst.sexpr(), dst)
+            ctx.set(p.name, a)
+        dst = Var('dst', return_type).eval(ctx)
+        ctx.set('dst', dst)
 
         # HACK: set MAX based on the result size. This isn't strictly correct,
         # but nearly every intrinsic ends with "dst[MAX:256] := 0" (or similar),
@@ -139,8 +140,8 @@ def parse_operation(intrinsic, params, dst, operation):
 
         return ctx.get('dst')
 
-    run.__name__ = intrinsic
-    return run
+    return Function(name, params, None, return_type=return_type, run=run,
+            code=operation)
 
 # Parse pseudocode from Intel's XML
 def parse_instrinsics(*, path='data.xml', whitelist=None,
@@ -162,11 +163,11 @@ def parse_instrinsics(*, path='data.xml', whitelist=None,
         if whitelist_regex and not re.search(whitelist_regex, name):
             continue
 
-        dst = var('dst', intrinsic.attrib['rettype'])
-        params = [var(p.attrib['varname'], p.attrib['type'])
+        params = [Var(p.attrib['varname'], p.attrib['type'])
                 for p in intrinsic.findall('parameter')]
+        return_type = intrinsic.attrib['rettype']
         [operation] = [op.text for op in intrinsic.findall('operation')]
 
-        fn_table[name] = parse_operation(name, params, dst, operation)
+        fn_table[name] = parse_operation(name, params, return_type, operation)
 
     return fn_table

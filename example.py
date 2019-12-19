@@ -34,13 +34,13 @@ table = parse_instrinsics(whitelist=whitelist)
 # Just stick em all in globals! Who cares?!
 globals().update(table)
 
-i = var('i', 'int')
-j = var('j', 'int')
-x = var('x', '__m256i')
-y = var('y', '__m256i')
-a = var('a', '__m512i')
-b = var('b', '__m512i')
-c = var('c', '__m512i')
+i = Var('i', 'int')
+j = Var('j', 'int')
+x = Var('x', '__m256i')
+y = Var('y', '__m256i')
+a = Var('a', '__m512i')
+b = Var('b', '__m512i')
+c = Var('c', '__m512i')
 
 # XOR zeroing
 check(_mm256_xor_si256(x, x) == _mm256_set1_epi8(0), for_all=[x])

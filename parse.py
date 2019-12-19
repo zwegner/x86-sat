@@ -34,6 +34,7 @@ tokens = [
 
     ['ASSIGN',          r':='],
     ['COLON',           r':'],
+    ['QUESTION',        r'\?'],
 
     ['PLUS',            r'\+'],
     ['MINUS',           r'-'],
@@ -68,8 +69,8 @@ rules = [
     ['parenthesized', ('LPAREN expr RPAREN', lambda p: p[1])],
     ['atom', 'identifier|integer|parenthesized'],
 
-    ['slice', ('atom LBRACKET expr RBRACKET', lambda p: Slice(p[0], p[2], p[2]))],
-    ['slice', ('atom LBRACKET expr COLON expr RBRACKET', lambda p: Slice(p[0], p[2], p[4]))],
+    ['slice', ('atom LBRACKET expr RBRACKET', lambda p: Slice(p[0], p[2], p[2])),
+        ('atom LBRACKET expr COLON expr RBRACKET', lambda p: Slice(p[0], p[2], p[4]))],
     ['not_expr', ('NOT (slice|atom)', lambda p: UnaryOp('NOT', p[1]))],
     ['factor', 'slice|atom|not_expr'],
     ['product', ('factor (TIMES factor)*', reduce_binop)],
@@ -81,7 +82,10 @@ rules = [
     ['comp', ('xor_expr ((EQUALS|LESS_THAN|GREATER_THAN) xor_expr)*', reduce_binop)],
     ['call_args', ('expr (COMMA expr)*', reduce_list)],
     ['call', ('identifier LPAREN call_args RPAREN', lambda p: Call(p[0], p[2]))],
-    ['expr', 'call|comp'],
+    ['comp_expr', 'call|comp'],
+    ['ternary', ('comp_expr QUESTION comp_expr COLON comp_expr',
+        lambda p: If(p[0], p[2], p[4]))],
+    ['expr', 'ternary|comp_expr'],
 
     ['assignment', ('(slice|identifier) ASSIGN expr', lambda p: Assign(p[0], p[2]))],
 

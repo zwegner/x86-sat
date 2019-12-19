@@ -335,16 +335,18 @@ class If:
         # If we can statically resolve this condition, only execute one branch
         bool_expr = try_bool(expr)
         if bool_expr == True:
-            self.if_block.eval(ctx)
+            return self.if_block.eval(ctx)
         elif bool_expr == False:
-            self.else_block.eval(ctx)
+            return self.else_block.eval(ctx)
         # Otherwise, execute both branches with a predicate
         else:
             with ctx.predicated(expr):
-                self.if_block.eval(ctx)
+                if_expr = self.if_block.eval(ctx)
             with ctx.predicated(z3.Not(expr)):
-                self.else_block.eval(ctx)
-        return None
+                else_expr = self.else_block.eval(ctx)
+            if if_expr or else_expr:
+                return if_expr | else_expr
+            return None
 
     def __repr__(self):
         else_block = ('ELSE\n%s\n' % indent(self.else_block)

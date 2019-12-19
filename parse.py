@@ -147,31 +147,46 @@ def parse_operation(name, params, return_type, operation):
     return Function(name, params, None, return_type=return_type, run=run,
             code=operation)
 
-# Parse pseudocode from Intel's XML
-def parse_instrinsics(*, path='data.xml', whitelist=None,
-        whitelist_regex=None):
-    # Parse the XML
-    try:
-        root = ET.parse(path)
-    except FileNotFoundError:
-        print('To use this, you must download the intrinsic XML data from:\n'
-                'https://software.intel.com/sites/landingpage/IntrinsicsGuide'
-                '/files/data-3.4.6.xml', file=sys.stderr)
-        sys.exit(1)
+class LazyXMLParser:
+    def __init__(self, *, path='data.xml', prefix='', xml_table=None,
+            fn_table=None):
+        self.path = path
+        self.prefix = prefix
+        self.xml_table = xml_table or {}
+        self.fn_table = fn_table or {}
 
-    fn_table = {}
-    for intrinsic in root.findall('intrinsic'):
-        name = intrinsic.attrib['name']
-        if whitelist and name not in whitelist:
-            continue
-        if whitelist_regex and not re.search(whitelist_regex, name):
-            continue
+    def parse_xml(self):
+        # Parse the XML
+        try:
+            root = ET.parse(self.path)
+        except FileNotFoundError:
+            print('To use this, you must download the intrinsic XML data from:\n'
+                    'https://software.intel.com/sites/landingpage/IntrinsicsGuide'
+                    '/files/data-3.4.6.xml', file=sys.stderr)
+            sys.exit(1)
 
-        params = [Var(p.attrib['varname'], p.attrib['type'])
-                for p in intrinsic.findall('parameter')]
-        return_type = intrinsic.attrib['rettype']
-        [operation] = [op.text for op in intrinsic.findall('operation')]
+        # Make a metadata dictionary of all intrinsics
+        for intrinsic in root.findall('intrinsic'):
+            name = intrinsic.attrib['name']
+            params = [Var(p.attrib['varname'], p.attrib['type'])
+                    for p in intrinsic.findall('parameter')]
+            return_type = intrinsic.attrib['rettype']
+            operations = [op.text for op in intrinsic.findall('operation')]
+            # HACK
+            operation = operations[0] if len(operations) == 1 else None
 
-        fn_table[name] = parse_operation(name, params, return_type, operation)
+            self.xml_table[name] = (params, return_type, operation)
 
-    return fn_table
+    # Lazily look up intrinsic names, and parse the pseudocode if we haven't yet
+    def __getattr__(self, name):
+        name = self.prefix + name
+        if name not in self.fn_table:
+            args = self.xml_table[name]
+            self.fn_table[name] = parse_operation(name, *args)
+        return self.fn_table[name]
+
+    # Create a copy of this parser that shares the metadata/parsing data, but
+    # with a new prefix
+    def prefixed(self, prefix):
+        return LazyXMLParser(path=self.path, prefix=self.prefix + prefix,
+                xml_table=self.xml_table, fn_table=self.fn_table)

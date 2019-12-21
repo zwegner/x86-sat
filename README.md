@@ -35,8 +35,8 @@ for anything serious.
 So far, this can do some interesting non-trivial things, like derive lookup
 tables for `vpternlogd`:
 ```python
-check_print(m512.ternarylogic_epi32(m512.set1_epi8(0xAA),
-       m512.set1_epi8(0xCC), m512.set1_epi8(0xF0), i) == m512.set1_epi8(0x57))
+check_print(_mm512_ternarylogic_epi32(_mm512_set1_epi8(0xAA),
+       _mm512_set1_epi8(0xCC), _mm512_set1_epi8(0xF0), i) == _mm512_set1_epi8(0x57))
 # -> [y = 0x1f]
 ```
 ...or find an index vector for `vpermb` that reverses its input:
@@ -68,5 +68,23 @@ redistribute this file myself.
 This project requires Z3, and my [sprdpl](https://github.com/zwegner/sprdpl) parsing library
 (included as a submodule).
 
-The library is mainly used with LazyXMLParser() magic object, which parses intrinsics on demand. See `example.py`
-for various example use cases.
+The library has two primary APIs for looking up and using intrinsics:
+* The `parse_whitelist()` function, which returns a dictionary of intrinsic objects, suitable for
+injecting directly into global scope:
+```python
+intrinsics = parse_whitelist('data.xml', regex='_mm256_set1_epi(8|32)')
+globals().update(intrinsics)
+check_print(_mm256_set1_epi8(0) == _mm256_set1_epi32(0))
+```
+
+* The `parse_meta()` function, which returns a magic object that lazily parses intrinsics pseudocode
+whenever attributes are accessed, like so:
+```python
+meta = parse_meta('data.xml')
+check_print(meta._mm256_xor_si256(0, 1) == 1)
+# .prefixed() allows reducing duplicated prefixes:
+avx = meta.prefixed('_mm256_')
+check_print(avx.set1_epi8(0) == 0)
+```
+
+See `example.py` for various example use cases.

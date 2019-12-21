@@ -117,7 +117,7 @@ def parse_operation(name, params, return_type, operation):
         tree = parser.parse(lex_ctx)
     except libparse.ParseError as e:
         e.print()
-        raise
+        sys.exit(1)
 
     # Create a wrapper function for this intrinsic
     def run(*args, **ctx_args):

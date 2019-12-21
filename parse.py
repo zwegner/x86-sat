@@ -22,7 +22,8 @@ def check_ident(t):
 
 tokens = [
     ['IDENTIFIER',      (r'[A-Za-z_][A-Za-z_0-9]*', check_ident)],
-    ['INTEGER',         (r'[0-9]+', lambda t: t.copy(value=int(t.value, 0)))],
+    ['INTEGER',         (r'(0x[0-9A-Fa-f]+)|[0-9]+',
+        lambda t: t.copy(value=int(t.value, 0)))],
 
     ['LPAREN',          r'\('],
     ['RPAREN',          r'\)'],
@@ -39,6 +40,7 @@ tokens = [
     ['PLUS',            r'\+'],
     ['MINUS',           r'-'],
     ['TIMES',           r'\*'],
+    ['AND',             r'\&'],
     ['LSHIFT',          r'<<'],
     ['RSHIFT',          r'>>'],
 

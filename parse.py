@@ -131,6 +131,8 @@ def parse_operation(name, params, return_type, operation):
         e.print()
         sys.exit(1)
 
+    params = [Var(name, type) for (name, type) in params]
+
     # Create a wrapper function for this intrinsic
     def run(*args, **ctx_args):
         ctx = Context(**ctx_args)
@@ -161,7 +163,7 @@ def parse_operation(name, params, return_type, operation):
         return ctx.get('dst')
 
     return Function(name, params, None, return_type=return_type, run=run,
-            code=operation)
+            code=operation, _size=get_type_width(return_type))
 
 # Wrapper for metadata parsed from XML data. This supports lazy runtime parsing
 # of intrinsics when looked up through getattr (e.g. meta._mm256_set1_epi8(0))
@@ -199,7 +201,7 @@ def parse_meta(path):
     xml_table = {}
     for intrinsic in root.findall('intrinsic'):
         name = intrinsic.attrib['name']
-        params = [Var(p.attrib['varname'], p.attrib['type'])
+        params = [(p.attrib['varname'], p.attrib['type'])
                 for p in intrinsic.findall('parameter')]
         return_type = intrinsic.attrib['rettype']
         operations = [op.text for op in intrinsic.findall('operation')]

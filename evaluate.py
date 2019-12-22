@@ -143,6 +143,9 @@ class Node:
 
         self.info = info or args[0]
 
+        if hasattr(self, 'setup'):
+            self.setup()
+
     # Overload ops to create new expressions
     def __eq__(self, other):
         return BinaryOp('==', self, other)
@@ -157,12 +160,17 @@ def node(*params, **kwparams):
         return cls
     return decorate
 
+def get_type_width(t):
+    return TYPE_WIDTH[t]
+
 # Generic free variable, evaluates to a Z3 bitvector with the right number of
 # bits for the corresponding C type
 @node('name', 'type')
 class Var:
+    def setup(self):
+        self._size = get_type_width(self.type)
     def eval(self, ctx):
-        return z3.BitVec(self.name, TYPE_WIDTH[self.type])
+        return z3.BitVec(self.name, self._size)
     def __repr__(self):
         return '(%s)%s' % (self.type, self.name)
 
@@ -458,7 +466,7 @@ class Function:
         # This will cause an extra eval() of the actual function each time it's
         # called, which calls ctx.set(). This should pretty much not matter,
         # but it seems weird
-        return Call(self, args)
+        return Call(self, args, _size=getattr(self, '_size', None))
 
     def __repr__(self):
         if self.block is None:

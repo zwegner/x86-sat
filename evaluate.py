@@ -2,11 +2,7 @@ import contextlib
 
 import z3
 
-# Globals symbols for Intel pseudocode
-INTR_GLOBALS = {
-    # Should maybe handle this better...
-    'ZeroExtend': lambda v, **kwargs: v,
-}
+import intr_builtins
 
 # Context handles the current symbol values during execution, and predication.
 # Predication is required for handling branches on unknown data, which get
@@ -20,7 +16,7 @@ class Context:
     def get(self, name):
         if name in self.symbols:
             return self.symbols[name]
-        return INTR_GLOBALS.get(name)
+        return getattr(intr_builtins, name, None)
 
     # If a predicate is active, make an expression conditional
     def predicate(self, true_expr, false_expr):

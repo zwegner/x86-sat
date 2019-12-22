@@ -21,7 +21,7 @@ So far, only these features of Intel's pseudocode are supported:
 See `tokens`/`rules` in `parse.py` for the most up-to-date information.
 
 There are many functions used in Intel's documentation that are not explicitly given in the XML. For now,
-these are almost all unsupported (see `INTR_GLOBALS` in `evaluate.py` for the current list).
+these are almost all unsupported (see functions defined in `intr_builtins.py` for the current list).
 
 This method of generating models is inherently limited. The intrinsics only cover a subset of x86
 instructions (presumably until a PDF reader is added), so this will mostly be

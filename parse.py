@@ -152,7 +152,11 @@ def parse_operation(name, params, return_type, operation):
         # anyways, caught by Z3 for differing BitVec sizes.
         ctx.set('MAX', dst.size() - 1)
 
-        tree.eval(ctx)
+        # Some intrinsics have a RETURN at top level, so handle that
+        try:
+            tree.eval(ctx)
+        except ReturnExc as e:
+            return e.value
 
         return ctx.get('dst')
 

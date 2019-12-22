@@ -214,8 +214,10 @@ def parse_meta(path):
 
 # Parse the given XML and return a dictionary with intrinsics that match the
 # given whitelist (either exact match for 'list' or regex match for 'regex')
-def parse_whitelist(path, list=None, regex=None):
-    metadata = parse_meta(path)
+def parse_whitelist(metadata, list=None, regex=None):
+    if not isinstance(metadata, IntrinsicMetadata):
+        assert isinstance(metadata, str)
+        metadata = parse_meta(metadata)
     intrinsics = {}
     for name in metadata.xml_table:
         if list and name not in list:

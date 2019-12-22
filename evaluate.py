@@ -172,7 +172,7 @@ class Var:
     def eval(self, ctx):
         return z3.BitVec(self.name, self._size)
     def __repr__(self):
-        return '(%s)%s' % (self.type, self.name)
+        return self.name
 
 @node('name')
 class Identifier:
@@ -483,19 +483,19 @@ class HexFormatter(z3.Formatter):
 z3.z3printer._Formatter = HexFormatter()
 
 # Run various expressions through a solver.
+SOLVER = z3.Solver()
 def check(assertion, for_all=[]):
-    solver = z3.Solver()
     ctx = Context()
     assertion = assertion.eval(ctx)
     if for_all:
         for_all = [f.eval(ctx) for f in for_all]
         assertion = z3.ForAll(for_all, assertion)
-    result = solver.check(assertion)
+    result = SOLVER.check(assertion)
     if result != z3.sat:
-        return None
-    return solver.model()
+        return (result, None)
+    return (result, SOLVER.model())
 
 def check_print(assertion, for_all=[]):
-    result = check(assertion, for_all=for_all)
-    print(result)
-    return result
+    (result, model) = check(assertion, for_all=for_all)
+    print(model)
+    return model

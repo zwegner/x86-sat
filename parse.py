@@ -32,6 +32,7 @@ tokens = [
     ['LBRACE',          r'{'],
     ['RBRACE',          r'}'],
     ['COMMA',           r','],
+    ['PERIOD',          r'\.'],
 
     ['ASSIGN',          r':='],
     ['COLON',           r':'],
@@ -65,16 +66,28 @@ def reduce_list(p):
     return p.clone(items=[p[0]] + [item[1] for item in p[1]],
         info=[p.info[0]] + [p.info[1][i][1] for i in range(len(p[1]))])
 
+def reduce_trailing(p):
+    [r, trailing] = p
+    for [fn, *args] in trailing:
+        r = fn(r, *args)
+    return r
+
 rules = [
     ['identifier', ('IDENTIFIER', lambda p: Identifier(p[0], info=p.get_info(0)))],
     ['integer', ('INTEGER', lambda p: Integer(p[0], info=p.get_info(0)))],
     ['parenthesized', ('LPAREN expr RPAREN', lambda p: p[1])],
-    ['atom', 'identifier|integer|parenthesized'],
 
-    ['slice', ('atom LBRACKET expr RBRACKET', lambda p: Slice(p[0], p[2], p[2])),
-        ('atom LBRACKET expr COLON expr RBRACKET', lambda p: Slice(p[0], p[2], p[4]))],
-    ['not_expr', ('NOT (slice|atom)', lambda p: UnaryOp('NOT', p[1]))],
-    ['factor', 'slice|atom|not_expr'],
+    ['trailing', ('PERIOD IDENTIFIER', lambda p: (Attr, p[1])),
+        ('LBRACKET expr RBRACKET', lambda p: (Slice, None, p[1])),
+        ('LBRACKET expr COLON expr RBRACKET', lambda p: (Slice, p[1], p[3]))],
+    ['name', ('identifier trailing*', reduce_trailing)],
+
+    ['call_args', ('expr (COMMA expr)*', reduce_list)],
+    ['call', ('identifier LPAREN call_args RPAREN', lambda p: Call(p[0], p[2]))],
+    ['atom', 'integer|parenthesized|call|name'],
+
+    ['not_expr', ('NOT atom', lambda p: UnaryOp('NOT', p[1]))],
+    ['factor', 'atom|not_expr'],
     ['product', ('factor (TIMES factor)*', reduce_binop)],
     ['sum', ('product ((PLUS|MINUS) product)*', reduce_binop)],
     ['shift_expr', ('sum ((LSHIFT|RSHIFT) sum)*', reduce_binop)],
@@ -82,14 +95,11 @@ rules = [
     ['or_expr', ('and_expr (OR and_expr)*', reduce_binop)],
     ['xor_expr', ('or_expr (XOR or_expr)*', reduce_binop)],
     ['comp', ('xor_expr ((EQUALS|LESS_THAN|GREATER_THAN) xor_expr)*', reduce_binop)],
-    ['call_args', ('expr (COMMA expr)*', reduce_list)],
-    ['call', ('identifier LPAREN call_args RPAREN', lambda p: Call(p[0], p[2]))],
-    ['comp_expr', 'call|comp'],
-    ['ternary', ('comp_expr QUESTION comp_expr COLON comp_expr',
+    ['ternary', ('comp QUESTION comp COLON comp',
         lambda p: If(p[0], p[2], p[4]))],
-    ['expr', 'ternary|comp_expr'],
+    ['expr', 'ternary|comp'],
 
-    ['assignment', ('(slice|identifier) ASSIGN expr', lambda p: Assign(p[0], p[2]))],
+    ['assignment', ('name ASSIGN expr', lambda p: Assign(p[0], p[2]))],
 
     ['if_stmt', ('IF expr NEWLINE stmt_list [ELSE stmt_list] FI',
         lambda p: If(p[1], p[3], p[4][1] if p[4] else Block([])))],

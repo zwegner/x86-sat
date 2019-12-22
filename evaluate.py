@@ -221,34 +221,68 @@ class BinaryOp:
     def __repr__(self):
         return '(%s %s %s)' % (self.lhs, self.op, self.rhs)
 
+# Attribute access. Intel uses this for treating variables like pseudo-unions
+# containing arrays of variously sized elements, like x.byte[y]
+SCALE_SIZE = {
+    'bit': 1,
+    'byte': 8,
+    'word': 16,
+    'dword': 32,
+    'qword': 64
+}
+@node('expr', 'attr')
+class Attr:
+    def get_scale(self):
+        return SCALE_SIZE[self.attr]
+    def __repr__(self):
+        return '%s.%s' % (self.expr, self.attr)
+
+# Reduce an identifier with possible nested attribute accesses/array indices
+# (example: dst.qword[j].byte[i]) into a few pieces of information, suitable
+# for both reading from and writing to this value. This returns the name, which
+# is the symbol containing the underlying BitVec (dst in this example);
+# lo/hi, which are the lowest/highest bits being selected;
+# scale, which is the size of each element (bit==1, byte==8, etc);
+# and width, which is how many total bits are being selected
+def get_range(self, ctx):
+    if isinstance(self, Identifier):
+        return [self.name, 0, None, 1, 1]
+    elif isinstance(self, Attr):
+        # Scale unused
+        [name, lo, hi, _, width] = get_range(self.expr, ctx)
+        assert hi is None
+        scale = self.get_scale()
+        return [name, lo, hi, scale, scale]
+    elif isinstance(self, Slice):
+        [name, base_lo, base_hi, scale, width] = get_range(self.expr, ctx)
+        assert base_hi is None
+
+        lo = self.lo.eval(ctx)
+        if self.hi is None:
+            hi = None
+        else:
+            hi = base_lo + scale * self.hi.eval(ctx)
+            width = hi - lo + 1
+        return [name, base_lo + lo * scale, hi, scale, width]
+    assert False
+
 @node('expr', 'hi', 'lo')
 class Slice:
     def eval(self, ctx):
-        expr = try_simplify(self.expr.eval(ctx))
-        hi, lo = self.hi.eval(ctx), self.lo.eval(ctx)
-        width = hi - lo + 1
+        [name, lo, hi, scale, width] = get_range(self, ctx)
+        expr = ctx.get(name)
 
         if is_z3(expr):
-            shifted = match_width_fn(expr, lo, lambda l, r: l >> r)
+            expr = match_width_fn(expr, lo, lambda l, r: l >> r)
 
             # Big hack! Simplify (x+y)-x -> y to get the width when we don't
             # know x. This is pretty common, e.g. a[index*8+7:index*8]
             if (isinstance(self.hi, BinaryOp) and self.hi.op == '+' and
                     equal(self.hi.lhs, self.lo)):
                 width1 = try_simplify(self.hi.rhs.eval(ctx))
-                return z3.Extract(width1, 0, shifted)
+                return z3.Extract(width1, 0, expr)
 
-            # HACK!! Z3 will complain if we try to Extract with a non-constant
-            # range [lo, hi], since it can't determine if lo <= hi. Well, it
-            # actually can, but the Z3 python wrapper doesn't simplify that
-            # expression before checking it. So, as a special case, see if we
-            # can at least determine that lo == hi (which is common because
-            # Slice is used for single-bit indexing like a[i]), then replace
-            # the expression with a variable shift and a single-bit extract.
-            if is_z3(hi) and is_z3(lo) and try_bool(hi == lo):
-                return z3.Extract(0, 0, shifted)
-
-            return z3.Extract(width - 1, 0, shifted)
+            return z3.Extract(width - 1, 0, expr)
 
         # Slice integers with normal bit ops
         assert width > 0
@@ -256,7 +290,7 @@ class Slice:
         return (expr >> lo) & mask
 
     def __repr__(self):
-        if self.hi is self.lo:
+        if self.hi is None:
             return '%s[%s]' % (self.expr, self.hi)
         return '%s[%s:%s]' % (self.expr, self.hi, self.lo)
 
@@ -277,11 +311,7 @@ class Assign:
         expr = self.expr.eval(ctx)
         # Handle assignment to slices
         if isinstance(self.target, Slice):
-            hi, lo = self.target.hi.eval(ctx), self.target.lo.eval(ctx)
-            width = hi - lo + 1
-
-            assert isinstance(self.target.expr, Identifier)
-            name = self.target.expr.name
+            [name, lo, hi, scale, width] = get_range(self.target, ctx)
 
             old = ctx.get(name)
             if not is_z3(old):
@@ -289,21 +319,25 @@ class Assign:
 
             # Hack around Z3 API to get a bit vector of the expected width
             if is_z3(expr):
-                expr = z3.Extract(width-1, 0, expr)
+                expr = z3.Extract(width - 1, 0, expr)
             elif width > 0:
                 expr = z3.BitVecVal(expr, width)
 
+            if hi is None:
+                hi = lo + scale - 1
             # Append the unassigned and assigned portions of this vector
             args = []
-            if old.size()-1 >= hi+1:
-                args.append(z3.Extract(old.size()-1, hi+1, old))
+            if old.size() - 1 >= hi + 1:
+                args.append(z3.Extract(old.size() - 1, hi + 1, old))
             if width > 0:
                 args.append(expr)
-            if lo-1 >= 0:
-                args.append(z3.Extract(lo-1, 0, old))
+            if lo - 1 >= 0:
+                args.append(z3.Extract(lo - 1, 0, old))
 
             new = z3.Concat(*args) if len(args) > 1 else args[0]
-            assert new.size() == old.size()
+
+            # XXX we can't always rely on this, think of a better way to check
+            #assert new.size() == old.size()
 
             ctx.set(name, ctx.predicate(new, old))
         # Assigning to a raw variable. Only need to deal with predication.

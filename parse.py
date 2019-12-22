@@ -12,8 +12,8 @@ from evaluate import *
 
 # Tokenizer
 
-KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'ENDFOR',
-        'RETURN', 'DEFINE', 'NOT', 'AND', 'OR', 'XOR'}
+KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'TO',
+        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'OR', 'XOR'}
 
 def check_ident(t):
     if t.value in KEYWORDS:

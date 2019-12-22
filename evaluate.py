@@ -7,15 +7,21 @@ import intr_builtins
 # Context handles the current symbol values during execution, and predication.
 # Predication is required for handling branches on unknown data, which get
 # transformed into a Z3 If() over the results of both branches.
+# The parent context is passed in as well, for accessing symbols in parent
+# scopes. I guess this is technically "dynamic scoping", but I doubt this makes
+# a difference vs. actual lexical scoping
 class Context:
-    def __init__(self, pred=None):
+    def __init__(self, pred=None, parent=None):
         self.symbols = {}
+        self.parent = parent
         self.pred = pred
     def set(self, name, value):
         self.symbols[name] = value
     def get(self, name):
         if name in self.symbols:
             return self.symbols[name]
+        if self.parent:
+            return self.parent.get(name)
         return getattr(intr_builtins, name, None)
 
     # If a predicate is active, make an expression conditional
@@ -261,7 +267,7 @@ class Call:
         if isinstance(fn, Function):
             fn = fn.run
         args = [try_eval(ctx, a) for a in self.args]
-        return fn(*args, pred=ctx.pred)
+        return fn(*args, pred=ctx.pred, parent=ctx)
     def __repr__(self):
         return '%s(%s)' % (self.fn, ', '.join(map(str, self.args)))
 

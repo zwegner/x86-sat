@@ -61,14 +61,16 @@ def try_simplify(v):
     return v
 
 def try_bool(b):
+    if z3.is_bv(b) or isinstance(b, int):
+        b = (b != 0)
     b = try_simplify(b)
     # HACK: z3 python interface has bug/weird behavior where (x == y) is
     # always False for unknown x and y, so use is_true and is_false instead
     if z3.is_true(b):
-        return True
+        return (True, None)
     if z3.is_false(b):
-        return False
-    return None
+        return (False, None)
+    return (None, b)
 
 def zero_ext(value, width):
     if not is_z3(value):
@@ -371,16 +373,11 @@ class Block:
 @node('expr', 'if_block', 'else_block')
 class If:
     def eval(self, ctx):
-        expr = self.expr.eval(ctx)
-        if z3.is_bv(expr) or isinstance(expr, int):
-            expr = (expr != 0)
-        expr = try_simplify(expr)
-
         # If we can statically resolve this condition, only execute one branch
-        bool_expr = try_bool(expr)
-        if bool_expr == True:
+        (bool_expr, expr) = try_bool(self.expr.eval(ctx))
+        if bool_expr is True:
             return self.if_block.eval(ctx)
-        elif bool_expr == False:
+        elif bool_expr is False:
             return self.else_block.eval(ctx)
         # Otherwise, execute both branches with a predicate
         else:
@@ -402,10 +399,9 @@ class If:
 class Case:
     def eval(self, ctx):
         for [value, stmt] in self.cases:
-            expr = try_simplify(self.expr.eval(ctx) == value.eval(ctx))
             # Try to resolve the expression statically
-            bool_expr = try_bool(expr)
-            if bool_expr == True:
+            (bool_expr, expr) = try_bool(self.expr.eval(ctx) == value.eval(ctx))
+            if bool_expr is True:
                 stmt.eval(ctx)
                 return None
             # Unknown expression, use predication

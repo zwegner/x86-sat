@@ -75,6 +75,9 @@ def try_bool(b):
 def zero_ext(value, width):
     if not is_z3(value):
         return value
+    # XXX is this safe?
+    if not z3.is_bv(value):
+        value = z3.Int2BV(value, width)
     assert value.size() > 0
     diff = try_simplify(width - value.size())
     if diff > 0:
@@ -84,8 +87,10 @@ def zero_ext(value, width):
 # Make sure two operands are the same width by zero-extending the smaller one.
 def match_width(lhs, rhs):
     if is_z3(lhs) or is_z3(rhs):
-        width = max([v.size() for v in [lhs, rhs] if is_z3(v)])
-        return [zero_ext(lhs, width), zero_ext(rhs, width)]
+        widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
+        if widths:
+            width = max(widths)
+            return [zero_ext(lhs, width), zero_ext(rhs, width)]
     return [lhs, rhs]
 
 # The "add" argument adds more bits, and is needed at least by left shift.
@@ -94,10 +99,12 @@ def match_width(lhs, rhs):
 # could silently overflow before.
 def match_width_fn(lhs, rhs, fn, add=0, double=False):
     if is_z3(lhs) or is_z3(rhs):
-        width = max([v.size() for v in [lhs, rhs] if is_z3(v)]) + add
-        if double:
-            width *= 2
-        return fn(zero_ext(lhs, width), zero_ext(rhs, width))
+        widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
+        if widths:
+            width = max(widths) + add
+            if double:
+                width *= 2
+            return fn(zero_ext(lhs, width), zero_ext(rhs, width))
     return fn(lhs, rhs)
 
 # For pretty printing

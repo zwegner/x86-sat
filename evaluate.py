@@ -115,8 +115,8 @@ def indent(s):
 WIDTH_TYPES = {
       8: ['char', '__mmask8'],
      16: ['short', '__mmask16'],
-     32: ['int', 'const int', '__mmask32'],
-     64: ['long long', '__int64', '__mmask64', '__m64'],
+     32: ['int', 'const int', 'unsigned int', '__mmask32'],
+     64: ['long long', '__int64', 'unsigned __int64', '__mmask64', '__m64'],
     128: ['__m128i'],
     256: ['__m256', '__m256d', '__m256i'],
     512: ['__m512i']
@@ -171,6 +171,9 @@ def node(*params, **kwparams):
 
 def get_type_width(t):
     return TYPE_WIDTH[t]
+
+def cast(t, val):
+    return z3.BitVecVal(val, TYPE_WIDTH[t])
 
 # Generic free variable, evaluates to a Z3 bitvector with the right number of
 # bits for the corresponding C type

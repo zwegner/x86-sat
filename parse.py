@@ -13,7 +13,8 @@ from evaluate import *
 # Tokenizer
 
 KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'TO',
-        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR', 'XOR'}
+        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR', 'XOR',
+        'DO', 'OD', 'WHILE'}
 
 def check_ident(t):
     if t.value in KEYWORDS:
@@ -110,13 +111,16 @@ rules = [
     ['for_stmt', ('FOR identifier ASSIGN expr TO expr NEWLINE stmt_list ENDFOR',
         lambda p: For(p[1], p[3], p[5], p[7]))],
 
+    ['while_stmt', ('DO WHILE expr stmt_list OD', lambda p: While(p[2], p[3]))],
+
     ['return_stmt', ('RETURN expr', lambda p: Return(p[1]))],
 
     ['params', ('identifier (COMMA identifier)*', reduce_list)],
     ['def_stmt', ('DEFINE IDENTIFIER LPAREN params RPAREN LBRACE stmt_list RBRACE',
         lambda p: Function(p[1], p[3], p[6]))],
 
-    ['stmt', ('[assignment|if_stmt|case_stmt|for_stmt|return_stmt|def_stmt] NEWLINE', lambda p: p[0])],
+    ['stmt', ('[assignment|if_stmt|case_stmt|for_stmt|while_stmt|return_stmt|def_stmt] NEWLINE',
+        lambda p: p[0])],
     ['stmt_list', ('stmt+', lambda p: Block([s for s in p[0] if s]))],
 ]
 

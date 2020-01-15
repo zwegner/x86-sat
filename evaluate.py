@@ -428,6 +428,26 @@ class For:
         return 'FOR %s := %s to %s\n%s\nENDFOR' % (self.var,
                 self.lo, self.hi, indent(self.block))
 
+@node('expr', 'block')
+class While:
+    def eval(self, ctx):
+        while True:
+            # We can only break if we statically know the condition to be false.
+            # While loops in hardware specs are kinda weird.
+            (bool_expr, expr) = try_bool(self.expr.eval(ctx))
+            if bool_expr is False:
+                break
+            # Loop condition definitely true: just execute the body
+            elif bool_expr is True:
+                self.block.eval(ctx)
+            # Otherwise, execute the loop body with a predicate
+            else:
+                with ctx.predicated(expr):
+                    self.block.eval(ctx)
+        return None
+    def __repr__(self):
+        return 'DO WHILE %s\n%s\nOD' % (self.expr, indent(self.block))
+
 class ReturnExc(Exception):
     def __init__(self, value):
         self.value = value

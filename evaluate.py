@@ -325,17 +325,6 @@ class Slice:
             return '%s[%s]' % (self.expr, self.lo)
         return '%s[%s:%s]' % (self.expr, self.hi, self.lo)
 
-@node('fn', 'args')
-class Call:
-    def eval(self, ctx):
-        fn = self.fn.eval(ctx)
-        if isinstance(fn, Function):
-            fn = fn.run
-        args = [try_eval(ctx, a) for a in self.args]
-        return fn(*args, pred=ctx.pred, parent=ctx)
-    def __repr__(self):
-        return '%s(%s)' % (self.fn, ', '.join(map(str, self.args)))
-
 @node('target', 'expr')
 class Assign:
     def eval(self, ctx):
@@ -479,6 +468,17 @@ class Return:
         raise ReturnExc(self.expr.eval(ctx))
     def __repr__(self):
         return 'RETURN %s' % self.expr
+
+@node('fn', 'args')
+class Call:
+    def eval(self, ctx):
+        fn = self.fn.eval(ctx)
+        if isinstance(fn, Function):
+            fn = fn.run
+        args = [try_eval(ctx, a) for a in self.args]
+        return fn(*args, pred=ctx.pred, parent=ctx)
+    def __repr__(self):
+        return '%s(%s)' % (self.fn, ', '.join(map(str, self.args)))
 
 @node('name', 'params', 'block', return_type=None)
 class Function:

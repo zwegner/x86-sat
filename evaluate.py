@@ -311,7 +311,7 @@ class Slice:
 
     def __repr__(self):
         if self.hi is None:
-            return '%s[%s]' % (self.expr, self.hi)
+            return '%s[%s]' % (self.expr, self.lo)
         return '%s[%s:%s]' % (self.expr, self.hi, self.lo)
 
 @node('fn', 'args')

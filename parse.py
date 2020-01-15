@@ -13,7 +13,7 @@ from evaluate import *
 # Tokenizer
 
 KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'TO',
-        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'OR', 'XOR'}
+        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR', 'XOR'}
 
 def check_ident(t):
     if t.value in KEYWORDS:
@@ -59,7 +59,7 @@ lexer = liblex.Lexer(tokens)
 def reduce_binop(p):
     r = p[0]
     for item in p[1]:
-        r = BinaryOp(item[0], r, item[1])
+        r = BinaryOp(item[0].upper(), r, item[1])
     return r
 
 def reduce_list(p):

@@ -427,7 +427,8 @@ class Case:
 class For:
     def eval(self, ctx):
         lo, hi = self.lo.eval(ctx), self.hi.eval(ctx)
-        assert lo <= hi
+        # This isn't always true: _mm_clmulepi64_si128 at least has '1 to 0'
+        #assert lo <= hi
         assert isinstance(self.var, Identifier)
         var = self.var.name
         for x in range(lo, hi+1):

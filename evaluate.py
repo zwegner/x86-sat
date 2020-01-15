@@ -514,8 +514,6 @@ class Function:
 
 # Uhh I don't think you're actually supposed to do this. Hex formatting for Z3.
 class HexFormatter(z3.Formatter):
-    def pp_int(self, a):
-        return z3.to_format('0x%0*x' % (a.size() // 4, a.as_long()))
     def pp_bv(self, a):
         return z3.to_format('0x%0*x' % (a.size() // 4, a.as_long()))
 z3.z3printer._Formatter = HexFormatter()

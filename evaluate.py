@@ -526,10 +526,17 @@ def check(assertion, for_all=[]):
     if for_all:
         for_all = [f.eval(ctx) for f in for_all]
         assertion = z3.ForAll(for_all, assertion)
+    SOLVER.reset()
     result = SOLVER.check(assertion)
     if result != z3.sat:
         return (result, None)
-    return (result, SOLVER.model())
+    # The expression is satisfiable. Create a dictionary from the resulting
+    # model, since the model returned by Z3 uses Z3 variables as keys, which
+    # are only created on-demand in eval() above, thus not very useful outside
+    # of this function
+    model = SOLVER.model()
+    model = {v.name(): model[v].as_long() for v in model}
+    return (result, model)
 
 def check_print(assertion, for_all=[]):
     (result, model) = check(assertion, for_all=for_all)

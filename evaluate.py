@@ -1,4 +1,7 @@
 import contextlib
+import inspect
+import re
+import sys
 
 import z3
 
@@ -150,7 +153,12 @@ class Node:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-        self.info = info or args[0]
+        self.info = info
+        if self.info is None:
+            for arg in args:
+                if isinstance(arg, Node) and arg.info is not None:
+                    self.info = arg.info
+                    break
 
         if hasattr(self, 'setup'):
             self.setup()
@@ -518,11 +526,44 @@ class HexFormatter(z3.Formatter):
         return z3.to_format('0x%0*x' % (a.size() // 4, a.as_long()))
 z3.z3printer._Formatter = HexFormatter()
 
+@contextlib.contextmanager
+def munge_exceptions():
+    try:
+        yield
+    except Exception as e:
+        traceback = inspect.trace()
+        # XXX this is pretty hacky!
+        print('Pseudocode traceback:')
+        last_index = 0
+        for i, (frame, *_) in enumerate(traceback):
+            self = frame.f_locals.get('self', None)
+            if isinstance(self, Node) and not isinstance(self, Block):
+                last_index = i
+                node_type = type(self).__name__
+                if self.info:
+                    print('File "%s", line %s, in %s' % (self.info.filename,
+                        self.info.lineno, node_type))
+                else:
+                    print('<unknown source>, in %s' % node_type)
+                # Print the first line of the "source"
+                source = str(self).strip()
+                source = re.sub(r'^([^\n]*(?=\n)|.{70}).*$', r'\1...', source,
+                        flags=re.DOTALL)
+                print('    ', source)
+        print('----------')
+        print('Python traceback (below pseudocode traceback):')
+        for _, filename, line, fn, ctx, index in traceback[last_index:]:
+            print('  File "%s", line %s, in %s' % (filename, line, fn))
+            print('    ', ctx[index].strip())
+        print(e)
+        sys.exit(1)
+
 # Run various expressions through a solver.
 SOLVER = z3.Solver()
 def check(assertion, for_all=[]):
     ctx = Context()
-    assertion = assertion.eval(ctx)
+    with munge_exceptions():
+        assertion = assertion.eval(ctx)
     if for_all:
         for_all = [f.eval(ctx) for f in for_all]
         assertion = z3.ForAll(for_all, assertion)

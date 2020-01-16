@@ -64,8 +64,7 @@ def reduce_binop(p):
     return r
 
 def reduce_list(p):
-    return p.clone(items=[p[0]] + [item[1] for item in p[1]],
-        info=[p.info[0]] + [p.info[1][i][1] for i in range(len(p[1]))])
+    return p.clone(items=[p[0]] + [item[1] for item in p[1]])
 
 def reduce_trailing(p):
     [r, trailing] = p
@@ -117,7 +116,7 @@ rules = [
 
     ['params', ('identifier (COMMA identifier)*', reduce_list)],
     ['def_stmt', ('DEFINE IDENTIFIER LPAREN params RPAREN LBRACE stmt_list RBRACE',
-        lambda p: Function(p[1], p[3], p[6]))],
+        lambda p: Function(p[1], p[3], p[6], info=p.get_info(1)))],
 
     ['stmt', ('[assignment|if_stmt|case_stmt|for_stmt|while_stmt|return_stmt|def_stmt] NEWLINE',
         lambda p: p[0])],

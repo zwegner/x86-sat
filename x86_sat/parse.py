@@ -13,8 +13,8 @@ from .evaluate import *
 # Tokenizer
 
 KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'TO',
-        'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR', 'XOR',
-        'DO', 'OD', 'WHILE'}
+        'downto', 'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR',
+        'XOR', 'DO', 'OD', 'WHILE'}
 
 def check_ident(t):
     if t.value in KEYWORDS:
@@ -111,8 +111,8 @@ rules = [
     ['case_stmt', ('CASE parenthesized OF NEWLINE (integer COLON stmt)+ ESAC',
         lambda p: Case(p[1], [(s[0], s[2]) for s in p[4]]))],
 
-    ['for_stmt', ('FOR identifier ASSIGN expr TO expr NEWLINE stmt_list ENDFOR',
-        lambda p: For(p[1], p[3], p[5], p[7]))],
+    ['for_stmt', ('FOR identifier ASSIGN expr (TO|DOWNTO) expr NEWLINE stmt_list ENDFOR',
+        lambda p: For(p[1], p[3], p[5], p[7], step=(1 if p[4].upper() == 'TO' else -1)))],
 
     ['while_stmt', ('DO WHILE expr stmt_list OD', lambda p: While(p[2], p[3]))],
 

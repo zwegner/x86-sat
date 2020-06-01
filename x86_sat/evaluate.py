@@ -444,7 +444,7 @@ class Case:
                 for [value, stmt] in self.cases)
         return 'CASE %s OF\n%s\nESAC' % (self.expr, indent(cases))
 
-@node('var', 'lo', 'hi', 'block')
+@node('var', 'lo', 'hi', 'block', step=1)
 class For:
     def eval(self, ctx):
         lo, hi = self.lo.eval(ctx), self.hi.eval(ctx)
@@ -452,7 +452,8 @@ class For:
         #assert lo <= hi
         assert isinstance(self.var, Identifier)
         var = self.var.name
-        for x in range(lo, hi+1):
+        # Handle ranges in either direction, with inclusive start/stop
+        for x in range(lo, hi + self.step, self.step):
             ctx.set(var, x)
             self.block.eval(ctx)
         return None

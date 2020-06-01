@@ -42,7 +42,9 @@ tokens = [
     ['PLUS',            r'\+'],
     ['MINUS',           r'-'],
     ['TIMES',           r'\*'],
-    ['AND',             r'\&'],
+    # XXX bitwise and logical AND/OR, they both get mapped to bitwise for now
+    ['AND',             (r'\&\&|\&', lambda t: t.copy(value='AND'))],
+    ['OR',              (r'\|\||\|', lambda t: t.copy(value='OR'))],
     ['LSHIFT',          r'<<'],
     ['RSHIFT',          r'>>'],
 

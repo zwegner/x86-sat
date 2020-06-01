@@ -116,7 +116,11 @@ rules = [
 
     ['return_stmt', ('RETURN expr', lambda p: Return(p[1]))],
 
-    ['params', ('identifier (COMMA identifier)*', reduce_list)],
+    # Some functions are defined with slices on parameters to denote size, e.g.
+    # DEFINE fn(a[127:0], b[127:0]). For now, allow trailing attributes/slices but
+    # just ignore them
+    ['param', ('identifier trailing*', lambda p: p[0])],
+    ['params', ('param (COMMA param)*', reduce_list)],
     ['def_stmt', ('DEFINE IDENTIFIER LPAREN params RPAREN LBRACE stmt_list RBRACE',
         lambda p: Function(p[1], p[3], p[6], info=p.get_info(1)))],
 

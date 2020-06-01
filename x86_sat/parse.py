@@ -2,9 +2,9 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-import sprdpl.lex as liblex
-import sprdpl.parse as libparse
-from evaluate import *
+from .sprdpl import lex as liblex
+from .sprdpl import parse as libparse
+from .evaluate import *
 
 ################################################################################
 ## Intel instruction pseudo-code parsing #######################################

@@ -1,4 +1,4 @@
-from parse import *
+from x86_sat.parse import *
 
 # Parse only a narrow subset of intrinsics used here, for speed
 regex = '|'.join([

@@ -5,7 +5,7 @@ import sys
 
 import z3
 
-import intr_builtins
+from . import intr_builtins
 
 # Context handles the current symbol values during execution, and predication.
 # Predication is required for handling branches on unknown data, which get

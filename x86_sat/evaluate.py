@@ -223,6 +223,8 @@ class UnaryOp:
     def eval(self, ctx):
         if self.op == 'NOT':
             return ~self.rhs.eval(ctx)
+        elif self.op == '-':
+            return -self.rhs.eval(ctx)
         assert False
     def __repr__(self):
         return '(%s %s)' % (self.op, self.rhs)

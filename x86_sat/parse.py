@@ -91,7 +91,8 @@ rules = [
     ['atom', 'integer|call|compound'],
 
     ['not_expr', ('NOT atom', lambda p: UnaryOp('NOT', p[1]))],
-    ['factor', 'atom|not_expr'],
+    ['neg_expr', ('MINUS atom', lambda p: UnaryOp('-', p[1]))],
+    ['factor', 'atom|not_expr|neg_expr'],
     ['product', ('factor (TIMES factor)*', reduce_binop)],
     ['sum', ('product ((PLUS|MINUS) product)*', reduce_binop)],
     ['shift_expr', ('sum ((LSHIFT|RSHIFT) sum)*', reduce_binop)],

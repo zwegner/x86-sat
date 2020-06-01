@@ -77,14 +77,16 @@ rules = [
     ['integer', ('INTEGER', lambda p: Integer(p[0], info=p.get_info(0)))],
     ['parenthesized', ('LPAREN expr RPAREN', lambda p: p[1])],
 
+    # The "trailing" rules don't return usable data directly, but rather a tuple of
+    # a function and extra arguments to be called on the expression
     ['trailing', ('PERIOD IDENTIFIER', lambda p: (Attr, p[1])),
         ('LBRACKET expr RBRACKET', lambda p: (Slice, None, p[1])),
         ('LBRACKET expr COLON expr RBRACKET', lambda p: (Slice, p[1], p[3]))],
-    ['name', ('identifier trailing*', reduce_trailing)],
+    ['compound', ('(identifier|parenthesized) trailing*', reduce_trailing)],
 
     ['call_args', ('expr (COMMA expr)*', reduce_list)],
     ['call', ('identifier LPAREN call_args RPAREN', lambda p: Call(p[0], p[2]))],
-    ['atom', 'integer|parenthesized|call|name'],
+    ['atom', 'integer|call|compound'],
 
     ['not_expr', ('NOT atom', lambda p: UnaryOp('NOT', p[1]))],
     ['factor', 'atom|not_expr'],
@@ -99,7 +101,7 @@ rules = [
         lambda p: If(p[0], p[2], p[4]))],
     ['expr', 'ternary|comp'],
 
-    ['assignment', ('name ASSIGN expr', lambda p: Assign(p[0], p[2]))],
+    ['assignment', ('compound ASSIGN expr', lambda p: Assign(p[0], p[2]))],
 
     ['if_stmt', ('IF expr NEWLINE stmt_list [ELSE stmt_list] FI',
         lambda p: If(p[1], p[3], p[4][1] if p[4] else Block([])))],

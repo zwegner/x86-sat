@@ -278,20 +278,22 @@ class Attr:
 
 # Reduce an identifier with possible nested attribute accesses/array indices
 # (example: dst.qword[j].byte[i]) into a few pieces of information, suitable
-# for both reading from and writing to this value. This returns the name, which
-# is the symbol containing the underlying BitVec (dst in this example);
-# lo/hi, which are the lowest/highest bits being selected;
-# scale, which is the size of each element (bit==1, byte==8, etc);
-# and width, which is how many total bits are being selected
+# for both reading from and writing to this value. This returns a tuple of:
+# * name, which is the identifier string containing the underlying BitVec
+#   ('dst' in the example above), or an expression, in which case this access
+#   is read-only
+# * lo/hi, which are the lowest/highest bits being selected
+# * scale, which is the size of each element (bit==1, byte==8, etc)
+# * width, which is how many total bits are being selected
 def get_range(self, ctx):
     if isinstance(self, Identifier):
-        return [self.name, 0, None, 1, 1]
+        return (self.name, 0, None, 1, 1)
     elif isinstance(self, Attr):
         # Scale unused
         [name, lo, hi, _, width] = get_range(self.expr, ctx)
         assert hi is None
         scale = self.get_scale()
-        return [name, lo, hi, scale, scale]
+        return (name, lo, hi, scale, scale)
     elif isinstance(self, Slice):
         [name, base_lo, base_hi, scale, width] = get_range(self.expr, ctx)
         assert base_hi is None
@@ -302,14 +304,19 @@ def get_range(self, ctx):
         else:
             hi = base_lo + scale * self.hi.eval(ctx)
             width = hi - lo + 1
-        return [name, base_lo + lo * scale, hi, scale, width]
+        return (name, base_lo + lo * scale, hi, scale, width)
+    # Normal expressions: we return a node as a name, which can be used
+    # for read-only accesses. We double check during assignment that
+    # the name is a string, as returned from the Identifier case above
+    else:
+        return (self, 0, None, 1, 1)
     assert False
 
 @node('expr', 'hi', 'lo')
 class Slice:
     def eval(self, ctx):
         [name, lo, hi, scale, width] = get_range(self, ctx)
-        expr = ctx.get(name)
+        expr = ctx.get(name) if isinstance(name, str) else name.eval(ctx)
 
         if is_z3(expr):
             expr = match_width_fn(expr, lo, lambda l, r: l >> r)
@@ -340,6 +347,8 @@ class Assign:
         # Handle assignment to slices
         if isinstance(self.target, Slice):
             [name, lo, hi, scale, width] = get_range(self.target, ctx)
+
+            assert isinstance(name, str), 'slice assignment to non-identifier: %s' % name
 
             old = ctx.get(name)
             if not is_z3(old):

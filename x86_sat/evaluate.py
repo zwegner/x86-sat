@@ -247,7 +247,7 @@ class BinaryOp:
             return lhs ^ rhs
         elif self.op == '<<':
             # Add more bits to the left if we know the rhs
-            add = rhs if isinstance(rhs, int) else 0
+            add = rhs if isinstance(rhs, (int, Integer)) else 0
             return match_width_fn(lhs, rhs, lambda l, r: l << r,
                     add=add, widths=widths)
         elif self.op == '>>':

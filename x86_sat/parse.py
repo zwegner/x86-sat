@@ -52,8 +52,8 @@ tokens = [
     ['GREATER_THAN',    r'>'],
     ['EQUALS',          r'=='],
 
+    ['WHITESPACE',      (r'([ \t]|\\\n)+', lambda t: None)],
     ['NEWLINE',         r'\n'],
-    ['WHITESPACE',      (r'[ \t]+', lambda t: None)],
 ]
 lexer = liblex.Lexer(tokens)
 

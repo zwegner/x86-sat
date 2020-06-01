@@ -93,16 +93,17 @@ def match_width(lhs, rhs):
         widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
         if widths:
             width = max(widths)
-            return [zero_ext(lhs, width), zero_ext(rhs, width)]
-    return [lhs, rhs]
+            return [zero_ext(lhs, width), zero_ext(rhs, width), widths]
+    return [lhs, rhs, None]
 
 # The "add" argument adds more bits, and is needed at least by left shift.
 # Intel's code uses stuff like (bit << 2), which needs to be 3 bits, not 1.
 # "double" doubles the width. This is needed for multiplications, which
 # could silently overflow before.
-def match_width_fn(lhs, rhs, fn, add=0, double=False):
+def match_width_fn(lhs, rhs, fn, add=0, double=False, widths=None):
     if is_z3(lhs) or is_z3(rhs):
-        widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
+        if widths is None:
+            widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
         if widths:
             width = max(widths) + add
             if double:
@@ -229,13 +230,15 @@ class UnaryOp:
 @node('op', 'lhs', 'rhs')
 class BinaryOp:
     def eval(self, ctx):
-        lhs, rhs = match_width(try_eval(ctx, self.lhs), try_eval(ctx, self.rhs))
+        [lhs, rhs, widths] = match_width(try_eval(ctx, self.lhs),
+                try_eval(ctx, self.rhs))
         if self.op == '+':
             return lhs + rhs
         elif self.op == '-':
             return lhs - rhs
         elif self.op == '*':
-            return match_width_fn(lhs, rhs, lambda l, r: l * r, double=True)
+            return match_width_fn(lhs, rhs, lambda l, r: l * r,
+                    double=True, widths=widths)
         elif self.op == 'AND':
             return lhs & rhs
         elif self.op == 'OR':
@@ -245,7 +248,8 @@ class BinaryOp:
         elif self.op == '<<':
             # Add more bits to the left if we know the rhs
             add = rhs if isinstance(rhs, int) else 0
-            return match_width_fn(lhs, rhs, lambda l, r: l << r, add=add)
+            return match_width_fn(lhs, rhs, lambda l, r: l << r,
+                    add=add, widths=widths)
         elif self.op == '>>':
             return lhs >> rhs
         elif self.op == '<':

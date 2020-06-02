@@ -576,15 +576,15 @@ def munge_exceptions():
 
 # Run various expressions through a solver.
 SOLVER = z3.Solver()
-def check(assertion, for_all=[]):
+def check(*assertions, for_all=[]):
     ctx = Context()
     with munge_exceptions():
-        assertion = assertion.eval(ctx)
+        assertions = [assertion.eval(ctx) for assertion in assertions]
     if for_all:
         for_all = [f.eval(ctx) for f in for_all]
-        assertion = z3.ForAll(for_all, assertion)
+        assertions = [z3.ForAll(for_all, v) for v in assertions]
     SOLVER.reset()
-    result = SOLVER.check(assertion)
+    result = SOLVER.check(*assertions)
     if result != z3.sat:
         return (result, None)
     # The expression is satisfiable. Create a dictionary from the resulting
@@ -595,7 +595,7 @@ def check(assertion, for_all=[]):
     model = {v.name(): model[v].as_long() for v in model}
     return (result, model)
 
-def check_print(assertion, for_all=[]):
-    (result, model) = check(assertion, for_all=for_all)
+def check_print(*assertions, for_all=[]):
+    (result, model) = check(*assertions, for_all=for_all)
     print(model)
     return model

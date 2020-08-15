@@ -193,6 +193,12 @@ def get_type_width(t):
 def cast(t, val):
     return z3.BitVecVal(val, TYPE_WIDTH[t])
 
+def serialize(value, t):
+    width = TYPE_WIDTH[t]
+    [n, m] = divmod(value.size(), width)
+    assert m == 0
+    return [z3.simplify(z3.Extract((i + 1) * width - 1, i * width, value)) for i in range(n)]
+
 # Generic free variable, evaluates to a Z3 bitvector with the right number of
 # bits for the corresponding C type
 @node('name', 'type')
@@ -576,7 +582,7 @@ def munge_exceptions():
 
 # Run various expressions through a solver.
 SOLVER = z3.Solver()
-def check(*assertions, for_all=[]):
+def check(*assertions, for_all=[], return_type='str'):
     ctx = Context()
     with munge_exceptions():
         assertions = [assertion.eval(ctx) for assertion in assertions]
@@ -592,10 +598,24 @@ def check(*assertions, for_all=[]):
     # are only created on-demand in eval() above, thus not very useful outside
     # of this function
     model = SOLVER.model()
-    model = {v.name(): model[v].as_long() for v in model}
+    if return_type == 'str':
+        model = {v.name(): '%#0*x' % ((model[v].size() + 3) // 4 + 2, model[v].as_long()) for v in model}
+    elif return_type == 'int':
+        model = {v.name(): model[v].as_long() for v in model}
+    elif return_type == 'var':
+        model = {v.name(): model[v] for v in model}
+    elif return_type.startswith('serial'):
+        etype = return_type[7:]
+        model = {v.name(): serialize(model[v], etype) for v in model}
+    else:
+        assert False, 'return type must be one of "str", "int", "var", or "serial:<type>"'
     return (result, model)
 
-def check_print(*assertions, for_all=[]):
-    (result, model) = check(*assertions, for_all=for_all)
-    print(model)
+def check_print(*assertions, for_all=[], return_type='str'):
+    (result, model) = check(*assertions, for_all=for_all, return_type=return_type)
+    if model:
+        width = max(len(k) for k in model)
+        for k, v in model.items():
+            print('%*s: %s' % (width, k, v))
+        print()
     return model

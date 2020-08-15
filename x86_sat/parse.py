@@ -106,8 +106,11 @@ rules = [
 
     ['assignment', ('compound ASSIGN expr', lambda p: Assign(p[0], p[2]))],
 
-    ['if_stmt', ('IF expr NEWLINE stmt_list [ELSE stmt_list] FI',
-        lambda p: If(p[1], p[3], p[4][1] if p[4] else Block([])))],
+    ['if_trail', ('ELSE if_stmt', lambda p: p[1]),
+        ('ELSE stmt_list FI', lambda p: p[1]),
+        ('FI', lambda p: Block([]))],
+    ['if_stmt', ('IF (expr NEWLINE|parenthesized) stmt_list if_trail',
+        lambda p: If(p[1][0] if isinstance(p[1], list) else p[1], p[2], p[3]))],
 
     ['case_stmt', ('CASE parenthesized OF NEWLINE (integer COLON stmt)+ ESAC',
         lambda p: Case(p[1], [(s[0], s[2]) for s in p[4]]))],

@@ -424,7 +424,7 @@ class If:
 
     def __repr__(self):
         else_block = ('ELSE\n%s\n' % indent(self.else_block)
-                if self.else_block.stmts else '')
+                if isinstance(self.else_block, Block) and self.else_block.stmts else '')
         return 'IF %s\n%s\n%sFI' % (self.expr,
                 indent(self.if_block), else_block)
 

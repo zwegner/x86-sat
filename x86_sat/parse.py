@@ -42,16 +42,24 @@ tokens = [
     ['PLUS',            r'\+'],
     ['MINUS',           r'-'],
     ['TIMES',           r'\*'],
+    ['DIVIDE',          r'/'],
+    ['MODULO',          r'%'],
+    ['LSHIFT',          r'<<'],
+    ['RSHIFT',          r'>>'],
     # XXX bitwise and logical AND/OR, they both get mapped to bitwise for now
     ['AND',             (r'\&\&|\&', lambda t: t.copy(value='AND'))],
     ['OR',              (r'\|\||\|', lambda t: t.copy(value='OR'))],
-    ['LSHIFT',          r'<<'],
-    ['RSHIFT',          r'>>'],
+    ['XOR',             (r'\^', lambda t: t.copy(value='XOR'))],
+    ['NOT',             (r'~', lambda t: t.copy(value='NOT'))],
 
+    ['LESS_EQUALS',     r'<='],
     ['LESS_THAN',       r'<'],
+    ['GREATER_EQUALS',  r'>='],
     ['GREATER_THAN',    r'>'],
     ['EQUALS',          r'=='],
+    ['NOT_EQUALS',      r'!='],
 
+    ['SEMICOLON',       r';'],
     ['WHITESPACE',      (r'([ \t]|\\\n)+', lambda t: None)],
     ['NEWLINE',         r'\n'],
 ]
@@ -93,13 +101,14 @@ rules = [
     ['not_expr', ('NOT atom', lambda p: UnaryOp('NOT', p[1]))],
     ['neg_expr', ('MINUS atom', lambda p: UnaryOp('-', p[1]))],
     ['factor', 'atom|not_expr|neg_expr'],
-    ['product', ('factor (TIMES factor)*', reduce_binop)],
+    ['product', ('factor ((TIMES|DIVIDE|MODULO) factor)*', reduce_binop)],
     ['sum', ('product ((PLUS|MINUS) product)*', reduce_binop)],
     ['shift_expr', ('sum ((LSHIFT|RSHIFT) sum)*', reduce_binop)],
     ['and_expr', ('shift_expr (AND shift_expr)*', reduce_binop)],
     ['or_expr', ('and_expr (OR and_expr)*', reduce_binop)],
     ['xor_expr', ('or_expr (XOR or_expr)*', reduce_binop)],
-    ['comp', ('xor_expr ((EQUALS|LESS_THAN|GREATER_THAN) xor_expr)*', reduce_binop)],
+    ['comp', ('xor_expr ((EQUALS|NOT_EQUALS|LESS_THAN|LESS_EQUALS|GREATER_THAN|'
+            'GREATER_EQUALS) xor_expr)*', reduce_binop)],
     ['ternary', ('comp QUESTION comp COLON comp',
         lambda p: If(p[0], p[2], p[4]))],
     ['expr', 'ternary|comp'],
@@ -130,7 +139,8 @@ rules = [
     ['def_stmt', ('DEFINE IDENTIFIER LPAREN params RPAREN LBRACE stmt_list RBRACE',
         lambda p: Function(p[1], p[3], p[6], info=p.get_info(1)))],
 
-    ['stmt', ('[assignment|if_stmt|case_stmt|for_stmt|while_stmt|return_stmt|def_stmt] NEWLINE',
+    ['stmt', ('[assignment|if_stmt|case_stmt|for_stmt|while_stmt|return_stmt|def_stmt] '
+            '(NEWLINE|SEMICOLON)',
         lambda p: p[0])],
     ['stmt_list', ('stmt+', lambda p: Block([s for s in p[0] if s]))],
 ]

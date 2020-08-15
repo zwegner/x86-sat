@@ -134,7 +134,7 @@ rules = [
 
 parser = libparse.Parser(rules, 'stmt_list')
 
-def parse_operation(name, params, return_type, operation):
+def parse_operation(name, params, return_var, return_type, operation):
     operation = operation.replace('\t', ' ' * 4)
     lex_ctx = lexer.input(operation, filename=name)
     try:
@@ -153,8 +153,8 @@ def parse_operation(name, params, return_type, operation):
                 'expected %s') % (len(args), len(params))
         for p, a in zip(params, args):
             ctx.set(p.name, a)
-        dst = Var('dst', return_type).eval(ctx)
-        ctx.set('dst', dst)
+        dst = Var(return_var, return_type).eval(ctx)
+        ctx.set(return_var, dst)
 
         # HACK: set MAX based on the result size. This isn't strictly correct,
         # but nearly every intrinsic ends with "dst[MAX:256] := 0" (or similar),
@@ -172,7 +172,7 @@ def parse_operation(name, params, return_type, operation):
         except ReturnExc as e:
             return e.value
 
-        return ctx.get('dst')
+        return ctx.get(return_var)
 
     return Function(name, params, None, return_type=return_type, run=run,
             code=operation, _size=get_type_width(return_type))
@@ -206,8 +206,11 @@ def parse_meta(path):
     except FileNotFoundError:
         print('To use this, you must download the intrinsic XML data from:\n'
                 'https://software.intel.com/sites/landingpage/IntrinsicsGuide'
-                '/files/data-3.4.6.xml', file=sys.stderr)
+                '/files/data-latest.xml', file=sys.stderr)
         sys.exit(1)
+
+    version = root.getroot().attrib['version']
+    version = tuple(int(x) for x in version.split('.'))
 
     # Make a metadata dictionary of all intrinsics
     xml_table = {}
@@ -215,12 +218,17 @@ def parse_meta(path):
         name = intrinsic.attrib['name']
         params = [(p.attrib['varname'], p.attrib['type'])
                 for p in intrinsic.findall('parameter')]
-        return_type = intrinsic.attrib['rettype']
+        # Return type spec changed in XML as of 3.5.0
+        if version < (3, 5, 0):
+            [return_var, return_type] = ('dst', intrinsic.attrib['rettype'])
+        else:
+            [return_var, return_type] = [(r.attrib.get('varname', 'dst'), r.attrib['type'])
+                    for r in intrinsic.findall('return')][0]
         operations = [op.text for op in intrinsic.findall('operation')]
         # HACK
         operation = operations[0] if len(operations) == 1 else None
 
-        xml_table[name] = (params, return_type, operation)
+        xml_table[name] = (params, return_var, return_type, operation)
 
     return IntrinsicMetadata(xml_table)
 

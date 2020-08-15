@@ -117,10 +117,10 @@ def indent(s):
 
 # Width of supported C types in bits
 WIDTH_TYPES = {
-      8: ['char', '__mmask8'],
-     16: ['short', '__mmask16'],
-     32: ['int', 'const int', 'unsigned int', '__mmask32'],
-     64: ['long long', '__int64', 'unsigned __int64', '__mmask64', '__m64'],
+      8: ['int8_t',  'uint8_t', 'char', '__mmask8'],
+     16: ['int16_t', 'uint16_t', 'short', '__mmask16'],
+     32: ['int32_t', 'uint32_t', 'int', 'const int', 'unsigned int', '__mmask32'],
+     64: ['int64_t', 'uint64_t', 'long long', '__int64', 'unsigned __int64', '__mmask64', '__m64'],
     128: ['__m128i'],
     256: ['__m256', '__m256d', '__m256i'],
     512: ['__m512i']

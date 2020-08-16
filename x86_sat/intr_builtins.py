@@ -40,3 +40,17 @@ def SignExtend(v, **kwargs):
     return Value(v, signed=True)
 
 Signed = SignExtend
+
+# XXX Intel uses the same freakin functions for signed and unsigned comparison...
+
+def _cmp(cmp, a, b, **kwargs):
+    [a, b, width, signed] = match_types(a, b)
+    a = z3.BV2Int(a, is_signed=signed)
+    b = z3.BV2Int(b, is_signed=signed)
+    return z3.Int2BV(z3.If(cmp(a, b), a, b), width)
+
+def MIN(a, b, **kwargs):
+    return _cmp(lambda a, b: a < b, a, b, **kwargs)
+
+def MAX(a, b, **kwargs):
+    return _cmp(lambda a, b: a > b, a, b, **kwargs)

@@ -12,6 +12,8 @@ regex = '|'.join([
     r'_mm512_ternarylogic_epi32',
     r'_mm512_permutexvar_epi8',
     r'_mm256_cmp_ep.8_mask',
+    r'_mm_setr_epi8',
+    r'_mm_(min|max)_ep.8',
 ])
 intrinsics = parse_whitelist('data.xml', regex=regex)
 # Stick em all in global scope
@@ -19,6 +21,7 @@ globals().update(intrinsics)
 
 i = Var('i', 'int')
 j = Var('j', 'int')
+l = Var('l', '__m128i')
 x = Var('x', '__m256i')
 y = Var('y', '__m256i')
 a = Var('a', '__m512i')
@@ -93,6 +96,20 @@ for [cmp_fn, cases] in cmp_cases:
     for [cmp, v, mask] in cases:
         v = _mm256_set1_epi8(v)
         test(cmp_fn(r, v, cmp) == i, model={'i': mask})
+
+# Min/max signed/unsigned
+
+r = _mm_setr_epi8(0xFF, 0x80, *range(-5, 9))
+t = _mm_setr_epi8(*reversed(range(-5, 9)), 0x80, 0xFF)
+test(_mm_min_epi8(r, t) == l, return_type='serial:int8_t',
+        model={'l': [-1, -128, -5, -4, -3, -2, -1, 0, 0, -1, -2, -3, -4, -5, -128, -1]})
+test(_mm_min_epu8(r, t) == l, return_type='serial:int8_t',
+        model={'l': [8, 7, 6, 5, 4, 3, 2, 0, 0, 2, 3, 4, 5, 6, 7, 8]})
+test(_mm_max_epi8(r, t) == l, return_type='serial:int8_t',
+        model={'l': [8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8]})
+test(_mm_max_epu8(r, t) == l, return_type='serial:int8_t',
+        model={'l': [255, 128, 251, 252, 253, 254, 255, 1, 1, 255, 254, 253, 252, 251, 128, 255]})
+
 # XOR zeroing
 test(_mm256_xor_si256(x, x) == _mm256_set1_epi8(0), for_all=[x],
         model={})

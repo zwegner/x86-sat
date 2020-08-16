@@ -544,7 +544,14 @@ class Return:
 @node('fn', 'args')
 class Call:
     def eval(self, ctx):
-        fn = self.fn.eval(ctx)
+        # Hey, you want to see a really awful hack to work around some really annoying
+        # aspect of the Intel docs?? Of course you do!! MAX is used both as an implicit
+        # bit width size variable for most intrinsics as well as a function. If it's
+        # being used here, it's the function...
+        if isinstance(self.fn, Identifier) and self.fn.name == 'MAX':
+            fn = intr_builtins.MAX
+        else:
+            fn = self.fn.eval(ctx)
         if isinstance(fn, Function):
             fn = fn.run
         args = [try_eval(ctx, a) for a in self.args]

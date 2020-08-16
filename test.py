@@ -43,6 +43,19 @@ def test(expr, model=None, model_fn=None, return_type='str', **kwargs):
         print_status('')
         print('FAIL!\n    expr: %s\n   model: %s' % (expr, m))
 
+# Check sign-/zero-extension and bit width things. We use custom code here,
+# extending 8 bits into 37 out of a 64 bit result.
+
+v = Var('v', 'uint64_t')
+
+s_ext = parse_operation('s_ext', [('a', 'uint8_t', '')], 'dst', 'uint64_t',
+        'dst[MAX:0] := 0; dst[36:0] := SignExtend(a);')
+test(v == s_ext(0x80F3), model={'v': '0x0000001ffffffff3'})
+
+z_ext = parse_operation('z_ext', [('a', 'uint8_t', '')], 'dst', 'uint64_t',
+        'dst[MAX:0] := -1; dst[36:0] := ZeroExtend(a);')
+test(v == z_ext(0x80F3), model={'v': '0xffffffe0000000f3'})
+
 # XOR zeroing
 test(_mm256_xor_si256(x, x) == _mm256_set1_epi8(0), for_all=[x],
         model={})

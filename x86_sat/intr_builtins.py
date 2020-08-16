@@ -1,5 +1,7 @@
 import z3
 
+from .util import *
+
 # This file contains global symbols for Intel pseudocode.
 # Basically, these are implementations of built-in functions that Intel doesn't
 # feel the need to specify apparently.
@@ -14,6 +16,15 @@ def POPCNT(bits, **kwargs):
         shift *= 2
     return bits & ((1 << shift) - 1)
 
-# Should maybe handle this better...
+# Zero/sign extension: just mark these values as signed/unsigned, the users
+# of the values will use this later when the size of the target value is known
+
 def ZeroExtend(v, **kwargs):
-    return v
+    return Value(v, signed=False)
+
+ZeroExtend16 = ZeroExtend
+
+def SignExtend(v, **kwargs):
+    return Value(v, signed=True)
+
+Signed = SignExtend

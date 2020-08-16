@@ -156,7 +156,8 @@ def parse_operation(name, params, return_var, return_type, operation):
         e.print()
         sys.exit(1)
 
-    params = [Var(name, type) for (name, type) in params]
+    params = [Var(name, type, signed=get_type_signed(etype))
+            for [name, type, etype] in params]
 
     # Create a wrapper function for this intrinsic
     def run(*args, **ctx_args):
@@ -165,6 +166,7 @@ def parse_operation(name, params, return_var, return_type, operation):
         assert len(args) == len(params), ('wrong number of arguments, got %s, '
                 'expected %s') % (len(args), len(params))
         for p, a in zip(params, args):
+            a = Value(a, signed=p.signed, width=p.width)
             ctx.set(p.name, a)
         dst = Var(return_var, return_type).eval(ctx)
         ctx.set(return_var, dst)
@@ -188,7 +190,7 @@ def parse_operation(name, params, return_var, return_type, operation):
         return ctx.get(return_var)
 
     return Function(name, params, None, return_type=return_type, run=run,
-            code=operation, _size=get_type_width(return_type))
+            code=operation, width=get_type_width(return_type))
 
 # Wrapper for metadata parsed from XML data. This supports lazy runtime parsing
 # of intrinsics when looked up through getattr (e.g. meta._mm256_set1_epi8(0))
@@ -229,7 +231,8 @@ def parse_meta(path):
     xml_table = {}
     for intrinsic in root.findall('intrinsic'):
         name = intrinsic.attrib['name']
-        params = [(p.attrib['varname'], p.attrib['type'])
+        params = [(p.attrib.get('varname'), p.attrib['type'],
+                p.attrib.get('etype', p.attrib['type']))
                 for p in intrinsic.findall('parameter')]
         # Return type spec changed in XML as of 3.5.0
         if version < (3, 5, 0):

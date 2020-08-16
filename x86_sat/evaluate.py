@@ -6,6 +6,7 @@ import sys
 import z3
 
 from . import intr_builtins
+from .util import *
 
 # Context handles the current symbol values during execution, and predication.
 # Predication is required for handling branches on unknown data, which get
@@ -50,23 +51,20 @@ class Context:
 def try_eval(ctx, e):
     return e.eval(ctx) if isinstance(e, Node) else e
 
-def is_z3(v):
-    return z3.is_expr(v) or z3.is_sort(v)
-
 # Weird hacky functions to "satisfy" Z3 (get it?)
 # We need to make sure we're dealing with the right bit-vector widths, etc.,
 # and not pollute the code with messy Z3 shit everywhere, so these are some
 # generic functions to munge things around.
 
-def try_simplify(v):
-    if is_z3(v):
-        return z3.simplify(v)
-    return v
-
 def try_bool(b):
+    # Just ignore attributes here
+    if isinstance(b, Value):
+        b = b.value
     if z3.is_bv(b) or isinstance(b, int):
         b = (b != 0)
     b = try_simplify(b)
+    if isinstance(b, bool):
+        return (b, None)
     # HACK: z3 python interface has bug/weird behavior where (x == y) is
     # always False for unknown x and y, so use is_true and is_false instead
     if z3.is_true(b):
@@ -75,41 +73,6 @@ def try_bool(b):
         return (False, None)
     return (None, b)
 
-def zero_ext(value, width):
-    if not is_z3(value):
-        return value
-    # XXX is this safe?
-    if not z3.is_bv(value):
-        value = z3.Int2BV(value, width)
-    assert value.size() > 0
-    diff = try_simplify(width - value.size())
-    if diff > 0:
-        return z3.ZeroExt(diff, value)
-    return value
-
-# Make sure two operands are the same width by zero-extending the smaller one.
-def match_width(lhs, rhs):
-    if is_z3(lhs) or is_z3(rhs):
-        widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
-        if widths:
-            width = max(widths)
-            return [zero_ext(lhs, width), zero_ext(rhs, width), widths]
-    return [lhs, rhs, None]
-
-# The "add" argument adds more bits, and is needed at least by left shift.
-# Intel's code uses stuff like (bit << 2), which needs to be 3 bits, not 1.
-# "double" doubles the width. This is needed for multiplications, which
-# could silently overflow before.
-def match_width_fn(lhs, rhs, fn, add=0, double=False, widths=None):
-    if is_z3(lhs) or is_z3(rhs):
-        if widths is None:
-            widths = [v.size() for v in [lhs, rhs] if z3.is_bv(v)]
-        if widths:
-            width = max(widths) + add
-            if double:
-                width *= 2
-            return fn(zero_ext(lhs, width), zero_ext(rhs, width))
-    return fn(lhs, rhs)
 
 # For pretty printing
 def indent(s):
@@ -201,8 +164,9 @@ def node(*params, **kwparams):
 def get_type_width(t):
     return TYPE_WIDTH[t]
 
-def cast(t, val):
-    return z3.BitVecVal(val, TYPE_WIDTH[t])
+# We'll probably want some more logic for this later
+def get_type_signed(t):
+    return not t.lower().startswith('u')
 
 def serialize(value, t):
     width = TYPE_WIDTH[t]
@@ -212,12 +176,15 @@ def serialize(value, t):
 
 # Generic free variable, evaluates to a Z3 bitvector with the right number of
 # bits for the corresponding C type
-@node('name', 'type')
+@node('name', 'type', signed=None)
 class Var:
     def setup(self):
-        self._size = get_type_width(self.type)
+        self.width = get_type_width(self.type)
+        if self.signed is None:
+            self.signed = get_type_signed(self.type)
     def eval(self, ctx):
-        return z3.BitVec(self.name, self._size)
+        bv = z3.BitVec(self.name, self.width)
+        return Value(bv, width=self.width, signed=self.signed)
     def __repr__(self):
         return self.name
 
@@ -249,37 +216,50 @@ class UnaryOp:
 @node('op', 'lhs', 'rhs')
 class BinaryOp:
     def eval(self, ctx):
-        [lhs, rhs, widths] = match_width(try_eval(ctx, self.lhs),
+        [lhs, rhs, width, signed] = match_types(try_eval(ctx, self.lhs),
                 try_eval(ctx, self.rhs))
+
         if self.op == '+':
-            return lhs + rhs
+            result = lhs + rhs
         elif self.op == '-':
-            return lhs - rhs
+            result = lhs - rhs
         elif self.op == '*':
-            return match_width_fn(lhs, rhs, lambda l, r: l * r,
-                    double=True, widths=widths)
+            # Double the width if these are bitvectors
+            if width is not None:
+                width *= 2
+                lhs = extend(lhs, width, signed=signed)
+                rhs = extend(rhs, width, signed=signed)
+            result = lhs * rhs
+        elif self.op == '/':
+            result = lhs / rhs
         elif self.op == 'AND':
-            return lhs & rhs
+            result = lhs & rhs
         elif self.op == 'OR':
-            return lhs | rhs
+            result = lhs | rhs
         elif self.op == 'XOR':
-            return lhs ^ rhs
+            result = lhs ^ rhs
         elif self.op == '<<':
             # Add more bits to the left if we know the rhs
-            add = rhs if isinstance(rhs, (int, Integer)) else 0
-            return match_width_fn(lhs, rhs, lambda l, r: l << r,
-                    add=add, widths=widths)
+            if isinstance(rhs, int):
+                width += rhs
+                lhs = extend(lhs, width, signed=signed)
+                rhs = extend(rhs, width, signed=signed)
+            result = lhs << rhs
         elif self.op == '>>':
-            return lhs >> rhs
+            result = lhs >> rhs
         elif self.op == '<':
-            return lhs < rhs
+            result = lhs < rhs
         elif self.op == '>':
-            return lhs > rhs
+            result = lhs > rhs
         elif self.op == '==':
-            return lhs == rhs
+            result = lhs == rhs
         elif self.op == '!=':
-            return lhs != rhs
-        assert False, 'unknown binop %s' % self.op
+            result = lhs != rhs
+        else:
+            assert False, 'unknown binop %s' % self.op
+
+        return Value(result, width=width, signed=signed)
+
     def __repr__(self):
         return '(%s %s %s)' % (self.lhs, self.op, self.rhs)
 
@@ -322,10 +302,18 @@ def get_range(self, ctx):
         assert base_hi is None
 
         lo = self.lo.eval(ctx)
+        # XXX just ignore attributes here...?
+        if isinstance(lo, Value):
+            lo = lo.value
+
         if self.hi is None:
             hi = None
         else:
-            hi = base_lo + scale * self.hi.eval(ctx)
+            hi = self.hi.eval(ctx)
+            # XXX just ignore attributes here...?
+            if isinstance(hi, Value):
+                hi = hi.value
+            hi = base_lo + scale * hi
             width = hi - lo + 1
         return (name, base_lo + lo * scale, hi, scale, width)
     # Normal expressions: we return a node as a name, which can be used
@@ -338,25 +326,33 @@ def get_range(self, ctx):
 @node('expr', 'hi', 'lo')
 class Slice:
     def eval(self, ctx):
-        [name, lo, hi, scale, width] = get_range(self, ctx)
+        [name, lo, hi, scale, result_width] = get_range(self, ctx)
         expr = ctx.get(name) if isinstance(name, str) else name.eval(ctx)
 
-        if is_z3(expr):
-            expr = match_width_fn(expr, lo, lambda l, r: l >> r)
+        [expr, _, width, signed] = match_types(expr, lo)
 
-            # Big hack! Simplify (x+y)-x -> y to get the width when we don't
-            # know x. This is pretty common, e.g. a[index*8+7:index*8]
-            if (isinstance(self.hi, BinaryOp) and self.hi.op == '+' and
-                    equal(self.hi.lhs, self.lo)):
-                width1 = try_simplify(self.hi.rhs.eval(ctx))
-                return z3.Extract(width1, 0, expr)
+        assert is_z3(expr)
 
-            return z3.Extract(width - 1, 0, expr)
+        # Weird: always treat the low index (shift value) as unsigned. Shifting
+        # by negative values doesn't make sense, and shifting a signed value by
+        # an unknown-signedness value shouldn't sign extend the shift value
+        lo = extend(lo, width, signed=False)
 
-        # Slice integers with normal bit ops
-        assert width > 0
-        mask = ((1 << width) - 1)
-        return (expr >> lo) & mask
+        expr = expr >> lo
+        # Unwrap the value. Should be fine, we have signed/width from the old value
+        if isinstance(expr, Value):
+            expr = expr.value
+
+        # Big hack! Simplify (x+y)-x -> y to get the width when we don't
+        # know x. This is pretty common, e.g. a[index*8+7:index*8]
+        if (isinstance(self.hi, BinaryOp) and self.hi.op == '+' and
+                equal(self.hi.lhs, self.lo)):
+            width1 = try_simplify(self.hi.rhs.eval(ctx))
+            result = z3.Extract(width1, 0, expr)
+        else:
+            result = z3.Extract(result_width - 1, 0, expr)
+
+        return Value(result, signed=signed, width=result_width)
 
     def __repr__(self):
         if self.hi is None:
@@ -374,10 +370,21 @@ class Assign:
             assert isinstance(name, str), 'slice assignment to non-identifier: %s' % name
 
             old = ctx.get(name)
+
+            # Get the old signedness value if it has one
+            signed = None
+            if isinstance(old, Value):
+                signed = old.signed
+                old = old.value
+
             if not is_z3(old):
                 old = z3.BitVec('undef', width)
 
             # Hack around Z3 API to get a bit vector of the expected width
+            if isinstance(expr, Value):
+                if signed is None:
+                    signed = expr.signed
+                expr = extend(expr.value, width, signed=expr.signed)
             if is_z3(expr):
                 expr = z3.Extract(width - 1, 0, expr)
             elif width > 0:
@@ -399,7 +406,10 @@ class Assign:
             # XXX we can't always rely on this, think of a better way to check
             #assert new.size() == old.size()
 
-            ctx.set(name, ctx.predicate(new, old))
+            value = try_simplify(ctx.predicate(new, old))
+            value = Value(value, width=new.size(), signed=signed)
+
+            ctx.set(name, value)
         # Assigning to a raw variable. Only need to deal with predication.
         else:
             assert isinstance(self.target, Identifier)
@@ -545,7 +555,7 @@ class Function:
         # This will cause an extra eval() of the actual function each time it's
         # called, which calls ctx.set(). This should pretty much not matter,
         # but it seems weird
-        return Call(self, args, _size=getattr(self, '_size', None))
+        return Call(self, args, width=getattr(self, 'width', None))
 
     def __repr__(self):
         if self.block is None:
@@ -591,14 +601,17 @@ def munge_exceptions():
         print(e)
         sys.exit(1)
 
+def unwrap(values):
+    return [v.value if isinstance(v, Value) else v for v in values]
+
 # Run various expressions through a solver.
 SOLVER = z3.Solver()
 def check(*assertions, for_all=[], return_type='str'):
     ctx = Context()
     with munge_exceptions():
-        assertions = [assertion.eval(ctx) for assertion in assertions]
+        assertions = unwrap([assertion.eval(ctx) for assertion in assertions])
     if for_all:
-        for_all = [f.eval(ctx) for f in for_all]
+        for_all = unwrap([f.eval(ctx) for f in for_all])
         assertions = [z3.ForAll(for_all, v) for v in assertions]
     SOLVER.reset()
     result = SOLVER.check(*assertions)

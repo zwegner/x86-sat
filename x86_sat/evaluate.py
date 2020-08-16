@@ -4,6 +4,8 @@ import re
 import sys
 
 import z3
+# Import a couple private functions manually for the hacky z3_multi_array_index()
+from z3.z3 import _to_ast_array, _to_expr_ref
 
 from . import intr_builtins
 from .util import *
@@ -73,6 +75,13 @@ def try_bool(b):
         return (False, None)
     return (None, b)
 
+# The z3 Python interface can't handle lookups of multidimensional arrays,
+# which are how lambdas are decomposed. Use some ugly code to interface
+# with the C library
+def z3_multi_array_index(array, *args):
+    [args, size] = _to_ast_array(args)
+    result = z3.Z3_mk_select_n(array.ctx_ref(), array.as_ast(), size, args)
+    return _to_expr_ref(result, array.ctx)
 
 # For pretty printing
 def indent(s):
@@ -255,6 +264,17 @@ class BinaryOp:
             result = lhs == rhs
         elif self.op == '!=':
             result = lhs != rhs
+        # Handle (a OP b): we allow OP to be assigned as a normal variable
+        # (despite OP being a keyword) with the various _MM_CMPINT_* enum
+        # values actually being z3 lambdas defined in intr_builtins.py. We
+        # look up the current value of OP and call the function via array
+        # access
+        elif self.op == 'OP':
+            op = ctx.get('OP')
+            assert z3.is_array_sort(op), op
+            lhs = z3.BV2Int(lhs, is_signed=signed)
+            rhs = z3.BV2Int(rhs, is_signed=signed)
+            result = z3_multi_array_index(op, lhs, rhs)
         else:
             assert False, 'unknown binop %s' % self.op
 

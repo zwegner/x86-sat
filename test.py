@@ -10,7 +10,8 @@ regex = '|'.join([
     r'_mm256_(permute2x128|alignr_epi8)',
     r'_mm512_set(1)?_epi8',
     r'_mm512_ternarylogic_epi32',
-    r'_mm512_permutexvar_epi8'
+    r'_mm512_permutexvar_epi8',
+    r'_mm256_cmp_ep.8_mask',
 ])
 intrinsics = parse_whitelist('data.xml', regex=regex)
 # Stick em all in global scope
@@ -56,6 +57,42 @@ z_ext = parse_operation('z_ext', [('a', 'uint8_t', '')], 'dst', 'uint64_t',
         'dst[MAX:0] := -1; dst[36:0] := ZeroExtend(a);')
 test(v == z_ext(0x80F3), model={'v': '0xffffffe0000000f3'})
 
+# Comparison tests: handle (a OP b). We compare a single value against a vector
+# with various signed/unsigned values and using each comparison mode to
+# check as many cases as possible
+
+r = _mm256_setr_epi8(0xFF, 0x80, *range(-5, 25))
+cmp_cases = [
+    # Signed
+    [_mm256_cmp_epi8_mask, [
+        [0, 0x10, '0x00800000'], # eq
+        [1, 0x10, '0x007fffff'], # lt
+        [2, 0x10, '0x00ffffff'], # le
+        [2, 0x03, '0x000007ff'], # le
+        [2, 0x80, '0x00000002'], # le
+        [3, 0x00, '0x00000000'], # false
+        [4, 0x00, '0xffffff7f'], # ne
+        [5, 0x0C, '0xfff80000'], # nlt
+        [6, 0x0C, '0xfff00000'], # nle
+        [7, 0x00, '0xffffffff'], # true
+    ]],
+    # Unsigned
+    [_mm256_cmp_epu8_mask, [
+        [0, 0x10, '0x00800000'], # eq 
+        [1, 0x10, '0x007fff80'], # lt 
+        [2, 0x10, '0x00ffff80'], # le 
+        [2, 0x80, '0xffffff82'], # le 
+        [3, 0x00, '0x00000000'], # false
+        [4, 0x00, '0xffffff7f'], # ne
+        [5, 0x0C, '0xfff8007f'], # nlt
+        [6, 0x0C, '0xfff0007f'], # nle
+        [7, 0x00, '0xffffffff'], # true
+    ]],
+]
+for [cmp_fn, cases] in cmp_cases:
+    for [cmp, v, mask] in cases:
+        v = _mm256_set1_epi8(v)
+        test(cmp_fn(r, v, cmp) == i, model={'i': mask})
 # XOR zeroing
 test(_mm256_xor_si256(x, x) == _mm256_set1_epi8(0), for_all=[x],
         model={})

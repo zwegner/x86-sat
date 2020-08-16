@@ -16,6 +16,18 @@ def POPCNT(bits, **kwargs):
         shift *= 2
     return bits & ((1 << shift) - 1)
 
+# Create z3 lambdas for comparison operations
+_a, _b = z3.Ints('a b')
+
+_MM_CMPINT_EQ     = z3.Lambda([_a, _b], _a == _b)           # 0
+_MM_CMPINT_LT     = z3.Lambda([_a, _b], _a < _b)            # 1
+_MM_CMPINT_LE     = z3.Lambda([_a, _b], _a <= _b)           # 2
+_MM_CMPINT_FALSE  = z3.Lambda([_a, _b], z3.BoolVal(False))  # 3
+_MM_CMPINT_NE     = z3.Lambda([_a, _b], _a != _b)           # 4
+_MM_CMPINT_NLT    = z3.Lambda([_a, _b], _a >= _b)           # 5
+_MM_CMPINT_NLE    = z3.Lambda([_a, _b], _a > _b)            # 6
+_MM_CMPINT_TRUE   = z3.Lambda([_a, _b], z3.BoolVal(True))   # 7
+
 # Zero/sign extension: just mark these values as signed/unsigned, the users
 # of the values will use this later when the size of the target value is known
 

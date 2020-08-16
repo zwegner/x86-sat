@@ -14,7 +14,7 @@ from .evaluate import *
 
 KEYWORDS = {'IF', 'FI', 'ELSE', 'CASE', 'ESAC', 'OF', 'FOR', 'to', 'TO',
         'downto', 'ENDFOR', 'RETURN', 'DEFINE', 'NOT', 'AND', 'and', 'OR',
-        'XOR', 'DO', 'OD', 'WHILE'}
+        'XOR', 'DO', 'OD', 'WHILE', 'OP'}
 
 def check_ident(t):
     if t.value in KEYWORDS:
@@ -108,12 +108,13 @@ rules = [
     ['or_expr', ('and_expr (OR and_expr)*', reduce_binop)],
     ['xor_expr', ('or_expr (XOR or_expr)*', reduce_binop)],
     ['comp', ('xor_expr ((EQUALS|NOT_EQUALS|LESS_THAN|LESS_EQUALS|GREATER_THAN|'
-            'GREATER_EQUALS) xor_expr)*', reduce_binop)],
+            'GREATER_EQUALS|OP) xor_expr)*', reduce_binop)],
     ['ternary', ('comp QUESTION comp COLON comp',
         lambda p: If(p[0], p[2], p[4]))],
     ['expr', 'ternary|comp'],
 
     ['assignment', ('compound ASSIGN expr', lambda p: Assign(p[0], p[2]))],
+    ['assignment', ('OP ASSIGN expr', lambda p: Assign(Identifier('OP'), p[2]))],
 
     ['if_trail', ('ELSE if_stmt', lambda p: p[1]),
         ('ELSE stmt_list FI', lambda p: p[1]),

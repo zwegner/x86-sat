@@ -169,6 +169,8 @@ class Node:
     def __ne__(self, other):      return BinaryOp('!=',  self, other)
     def __add__(self, other):     return BinaryOp('+',   self, other)
     def __radd__(self, other):    return BinaryOp('+',   self, other)
+    def __sub__(self, other):     return BinaryOp('-',   self, other)
+    def __rsub__(self, other):    return BinaryOp('-',   other, self)
     def __lshift__(self, other):  return BinaryOp('<<',  self, other)
     def __rshift__(self, other):  return BinaryOp('>>',  self, other)
     def __and__(self, other):     return BinaryOp('AND', self, other)
@@ -176,6 +178,15 @@ class Node:
     def __xor__(self, other):     return BinaryOp('XOR', self, other)
 
     def __invert__(self):         return UnaryOp('NOT',  self)
+    def __neg__(self):            return UnaryOp('-',  self)
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            assert item.start is not None
+            assert item.stop is not None
+            assert item.step is None
+            return Slice(self, Integer(item.start), Integer(item.stop))
+        return Slice(self, None, Integer(item))
 
 # Decorator for easily making Node subclasses with given parameters
 def node(*params, **kwparams):

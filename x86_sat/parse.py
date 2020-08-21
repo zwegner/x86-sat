@@ -39,6 +39,12 @@ tokens = [
     ['COLON',           r':'],
     ['QUESTION',        r'\?'],
 
+    # These are before the non-assigning operators
+    ['PLUS_EQUALS',     r'\+='],
+    ['MINUS_EQUALS',    r'-='],
+    ['LSHIFT_EQUALS',   r'<<='],
+    ['RSHIFT_EQUALS',   r'>>='],
+
     ['PLUS',            r'\+'],
     ['MINUS',           r'-'],
     ['TIMES',           r'\*'],
@@ -115,6 +121,8 @@ rules = [
 
     ['assignment', ('compound ASSIGN expr', lambda p: Assign(p[0], p[2]))],
     ['assignment', ('OP ASSIGN expr', lambda p: Assign(Identifier('OP'), p[2]))],
+    ['assignment', ('identifier (PLUS_EQUALS|MINUS_EQUALS|LSHIFT_EQUALS|RSHIFT_EQUALS) expr',
+            lambda p: Assign(p[0], BinaryOp(p[1].replace('=', ''), p[0], p[2])))],
 
     ['if_trail', ('ELSE if_stmt', lambda p: p[1]),
         ('ELSE stmt_list FI', lambda p: p[1]),

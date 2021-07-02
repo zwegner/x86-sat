@@ -93,9 +93,9 @@ WIDTH_TYPES = {
      16: ['int16_t', 'uint16_t', 'short', '__mmask16'],
      32: ['int32_t', 'uint32_t', 'int', 'const int', 'unsigned int', '__mmask32'],
      64: ['int64_t', 'uint64_t', 'long long', '__int64', 'unsigned __int64', '__mmask64', '__m64'],
-    128: ['__m128i'],
+    128: ['__m128', '__m128d', '__m128i'],
     256: ['__m256', '__m256d', '__m256i'],
-    512: ['__m512i']
+    512: ['__m512', '__m512d', '__m512i'],
 }
 TYPE_WIDTH = {t: size for size, ts in WIDTH_TYPES.items() for t in ts}
 

@@ -145,6 +145,7 @@ class Node:
     def __rsub__(self, other):    return BinaryOp('-',   other, self)
     def __lshift__(self, other):  return BinaryOp('<<',  self, other)
     def __rshift__(self, other):  return BinaryOp('>>',  self, other)
+    def __mod__(self, other):     return BinaryOp('%',  self, other)
     def __and__(self, other):     return BinaryOp('AND', self, other)
     def __or__(self, other):      return BinaryOp('OR',  self, other)
     def __xor__(self, other):     return BinaryOp('XOR', self, other)
@@ -264,6 +265,8 @@ class BinaryOp:
             result = lhs == rhs
         elif self.op == '!=':
             result = lhs != rhs
+        elif self.op == '%':
+            result = lhs % rhs
         # Handle (a OP b): we allow OP to be assigned as a normal variable
         # (despite OP being a keyword) with the various _MM_CMPINT_* enum
         # values actually being z3 lambdas defined in intr_builtins.py. We

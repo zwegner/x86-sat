@@ -230,7 +230,7 @@ def parse_meta(path):
     except FileNotFoundError:
         print('To use this, you must download the intrinsic XML data from:\n'
                 'https://www.intel.com/content/dam/develop/public/us/en/include'
-                '/intrinsics-guide/data-3-6-0.xml', file=sys.stderr)
+                '/intrinsics-guide/data-latest.xml', file=sys.stderr)
         sys.exit(1)
 
     version = root.getroot().attrib['version']
